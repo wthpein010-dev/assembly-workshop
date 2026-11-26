@@ -18,7 +18,19 @@ function statement(query, params = []) {
     first: async () => stmt.get(...params) ?? null,
   };
 }
-const env = { DB: { prepare: statement } };
+const env = {
+  DB: { prepare: statement },
+  LOCAL_ASSETS: {
+    // The build wrapper invokes this only for exact model and vendor asset paths.
+    async fetch(request) {
+      const path = new URL(request.url).pathname;
+      const bytes = await readFile(join(project, path.slice(1)));
+      return new Response(request.method === 'HEAD' ? null : bytes, {
+        headers: { 'Content-Type': path.endsWith('.glb') ? 'model/gltf-binary' : 'text/javascript; charset=utf-8' },
+      });
+    },
+  },
+};
 const port = Number(process.env.WORKSHOP_PORT || 4178);
 const origin = 'http://127.0.0.1:' + port;
 

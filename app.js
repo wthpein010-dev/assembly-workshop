@@ -2,6 +2,7 @@ import { escapeHtml as esc, loadSave, persistSave, normalizeSave, initialState, 
 import { makeCloud } from './cloud.js';
 import { trainingPage, bindTraining } from './training.js';
 import { communityPage, bindCommunity } from './community.js';
+import { factoryPage, bindFactoryPage } from './factory-page.js';
 
 const app = document.querySelector('#app');
 const notice = document.querySelector('#notice');
@@ -17,6 +18,7 @@ const coopSteps = [
 ];
 let state = loadSave(localStorage);
 let view = '';
+let disposeFactoryPage;
 let toastTimer;
 let step = 0;
 let draft = profileFrom({ name: '' });
@@ -69,7 +71,7 @@ const ctx = { state: () => state, commit, go, toast, escape: esc, asset };
 function changeRoute() {
   const requested = location.hash.slice(1);
   const route = Object.hasOwn(viewNames, requested) ? requested : state.profile ? 'hall' : 'start';
-  view = state.profile || ['start', 'create', 'account'].includes(route) ? route : 'start';
+  view = state.profile || ['start', 'create', 'account', 'world'].includes(route) ? route : 'start';
   clearInterval(worldTimer);
 
   render();
@@ -137,6 +139,7 @@ function startPage() {
       <div class="btn-row">
         ${button(state.profile ? '继续游戏' : '创建角色', state.profile ? 'hall' : 'create', 'primary')}
         ${!state.profile ? '<button type="button" class="btn btn-secondary" data-action="quick">快速试玩</button>' : button('我的工位', 'honor')}
+        ${!state.profile ? button('先看厂区', 'world', 'text') : ''}
       </div>
     </div>
     <div class="start-chapters container">
@@ -218,18 +221,6 @@ function hallPage() {
       ${[['online','联机大厅','聊天、邀请其他玩家一起质检','yard'],['help','工友求助','发布卡点或协助他人','station'],['event','建设周','解锁班组荣誉与纪念工装','season-scene']].map(([route,label,body,img]) =>
         `<a href="#${route}" class="bay-link" style="--bay-image:url('${asset(img)}')"><strong>${label}</strong><span>${body}</span></a>`).join('')}
     </section>
-  </div>`;
-}
-
-function worldPage() {
-  return `<div class="container world-page">
-    <div class="section-heading"><div><span class="eyeline">电子装配车间</span><h1>工坊地图</h1></div>${button('返回大厅', 'hall')}</div>
-    <div class="world-scene" aria-label="车间共享工坊">
-      <a class="hotspot h-training" href="#missions"><span aria-hidden="true">◈</span><b>装配训练</b></a>
-      <a class="hotspot h-team" href="#team"><span aria-hidden="true">◈</span><b>组队工位</b></a>
-      <a class="hotspot h-honor" href="#honor"><span aria-hidden="true">◈</span><b>荣誉展厅</b></a>
-    </div>
-    <div class="world-destinations">${button('班组交流', 'social')}${button('联机大厅', 'online')}${button('互助任务', 'help')}${button('工坊建设周', 'event')}</div>
   </div>`;
 }
 
@@ -391,15 +382,19 @@ async function refreshWorld(action, details) {
 
 function render() {
   if (!view) return;
+  disposeFactoryPage?.();
+  disposeFactoryPage = undefined;
   const guest = !state.profile || view === 'start' || view === 'create';
   const page = trainingViews.has(view) ? trainingPage(view, ctx)
     : communityViews.has(view) ? communityPage(view, ctx)
-    : ({ start: startPage, create: creatorPage, hall: hallPage, world: worldPage, account: accountPage, online: onlinePage }[view])();
+    : view === 'world' ? factoryPage(ctx)
+    : ({ start: startPage, create: creatorPage, hall: hallPage, account: accountPage, online: onlinePage }[view])();
   app.innerHTML = shell(typeof page === 'string' ? page : '', guest);
   const panel = document.querySelector('#main');
   if (typeof page !== 'string' && page) panel.append(page);
   if (trainingViews.has(view)) bindTraining(panel, view, ctx);
   if (communityViews.has(view)) bindCommunity(panel, view, ctx);
+  if (view === 'world') disposeFactoryPage = bindFactoryPage(panel, ctx);
   if (view === 'online' && cloud.meta()) drawWorld();
 }
 

@@ -155,7 +155,7 @@ img { display: block; max-width: 100%; }
   filter: var(--portrait-tone, none);
 }
 .portrait-medium { width: 83px; height: 83px; }
-.creator, .hall, .world-page, .account-page, .online-page, .page-main > .community {
+.creator, .hall, .account-page, .online-page, .page-main > .community {
   padding-block: var(--page-top) var(--page-bottom);
 }
 .creator-steps { list-style: none; margin: 0 0 22px; padding: 0; display: flex; flex-wrap: wrap; gap: .5rem 1.45rem; }
@@ -227,14 +227,6 @@ progress::-moz-progress-bar { background: var(--mint); }
 .bay-link strong { font-size: 1.13rem; }
 .bay-link span { color: #d5e0d6; font-size: .85rem; }
 .bay-link:hover { border-color: var(--amber); }
-.world-scene { aspect-ratio: var(--scene-ratio); border: 1px solid #63756a; border-radius: var(--panel-radius); position: relative; background: linear-gradient(0deg,#111b17bb,transparent 39%),url("./assets/yard.webp") center 47% / cover; }
-.hotspot { position: absolute; color: var(--paper); background: #14241fec; border: 1px solid #8cb39e; border-radius: 4px; min-height: var(--control-size); padding: .4rem .75rem; display: flex; gap: .4rem; align-items: center; box-shadow: 0 0 32px #101a15e8; font-size: .94rem; }
-.hotspot span { color: var(--mint); font-size: 1.3rem; }
-.hotspot:hover { border-color: var(--amber); }
-.h-training { top: 60%; left: 12%; }
-.h-team { top: 40%; left: 43%; }
-.h-honor { top: 57%; right: 10%; }
-.world-destinations { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--layout-gap); margin-top: var(--layout-gap); }
 
 .account-grid { display: grid; grid-template-columns: var(--column-side) var(--column-main); gap: var(--layout-gap); }
 .account-profile .portrait { margin-bottom: 9px; }
@@ -316,18 +308,12 @@ progress::-moz-progress-bar { background: var(--mint); }
   .mile { min-height: 61px; border-bottom: 1px solid var(--line); }
   .mile:nth-child(even) { border-right: 0; }
   .mile:nth-child(n+3) { border-bottom: 0; }
-  .hotspot { padding-inline: .45rem; gap: .25rem; font-size: .875rem; }
-  .hotspot span { font-size: .98rem; }
-  .h-training { left: 5%; top: 60%; }
-  .h-team { left: 50%; top: 22%; transform: translateX(-50%); }
-  .h-honor { right: 5%; top: 60%; }
   .game-footer { padding-block: .65rem max(.65rem, env(safe-area-inset-bottom)); }
   .toast { bottom: max(.75rem, env(safe-area-inset-bottom)); right: var(--page-gutter); max-width: calc(100vw - 2 * var(--page-gutter)); }
 }
 @media (max-width: 30rem) {
   .start-chapters div { display: grid; align-content: start; }
   .choices.stacked, .bay-links { grid-template-columns: minmax(0, 1fr); }
-  .world-destinations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .live-message { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
 }
 @media (prefers-reduced-motion: reduce) {
