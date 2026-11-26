@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/three/addons/loaders/GLTFLoader.js';
 import { createFactoryActivity } from './factory-activity.js';
+import { createRecoverySimulation } from './factory-recovery.js';
+import { createRecoveryVisuals } from './factory-recovery-view.js';
 import {
   BENCH_RANGE, EYE_HEIGHT, benchCameraPose, clamp, dampOverview, movementVector, movePlayer,
   nearbyBench, nearestStandable, overviewDistance, sampleCameraTransition, shiftOverview,
@@ -187,9 +189,10 @@ function createWayfinding(layout, scene) {
     guideMaterial.dispose();
   }
 
-  return (point, showRoute) => {
+  return (point, showRoute, hideSelectedRing) => {
     for (const ring of rings.children) {
       const highlighted = ring.userData.pointId === point?.id;
+      ring.visible = !highlighted || !hideSelectedRing;
       ring.material.color.copy(highlighted ? selected : neutral);
       ring.scale.setScalar(highlighted ? 1.23 : 1);
     }
@@ -366,7 +369,7 @@ export function createFactoryScene(canvas, options = {}) {
   const {
     assetUrl = name => `./assets/${name}`,
     onProgress, onReady, onMode, onZone, onStatus, onInteract,
-    onBenchNearby, onBench,
+    onBenchNearby, onBench, recovery: initialRecovery, onRecovery, onRecoveryView,
   } = options;
   const doc = canvas.ownerDocument;
   const win = doc.defaultView;
@@ -385,14 +388,18 @@ export function createFactoryScene(canvas, options = {}) {
   const badgeScreen = new THREE.Vector3();
   let renderer, resizeObserver, layout, player, hero, heroShadow, updateWayfinding, revealInterior, activity;
   let benchMarkers, benchSession;
+  let recoverySimulation, recoveryVisuals, recoveryViewKey;
+  let recoveryProgress = initialRecovery;
   let closestBench = null;
   let badgePress = null;
   let visibilityObserver;
+  let resizePending = false;
   let canvasVisible = true;
   let overviewView, overviewTarget;
   let mode = 'overview';
   let previewPoint = null;
   let activeZone = null;
+  let hideZoneRing = false;
   let currentPose, transition, frameId;
   let lastFrame = 0;
   let dirty = true;
@@ -435,9 +442,13 @@ export function createFactoryScene(canvas, options = {}) {
   function setZone(point) {
     if (activeZone?.id === point?.id) return;
     activeZone = point;
-    updateWayfinding?.(point, mode === 'overview');
-    dirty = true;
+    syncWayfinding();
     onZone?.(point);
+  }
+
+  function syncWayfinding() {
+    updateWayfinding?.(activeZone, mode === 'overview', hideZoneRing);
+    dirty = true;
   }
 
   function nearestZone() {
@@ -468,6 +479,48 @@ export function createFactoryScene(canvas, options = {}) {
 
   function syncNearbyBench() {
     setNearbyBench(mode === 'walk' && !transition && !benchSession ? nearbyBench(player, layout) : null);
+  }
+
+  function freeRecoveryWalk() {
+    return recoverySimulation && !destroyed && mode === 'walk' && !transition && !benchSession;
+  }
+
+  function syncRecoveryView() {
+    if (!recoverySimulation || destroyed) return;
+    const active = Boolean(freeRecoveryWalk());
+    const { nearbyDrop, nearbyRobot, pulseCooldown, jammed } = recoverySimulation.state;
+    const hideRing = active && Boolean(nearbyDrop);
+    if (hideRing !== hideZoneRing) {
+      hideZoneRing = hideRing;
+      syncWayfinding();
+    }
+    if (!onRecoveryView) return;
+    const snapshot = {
+      active,
+      nearbyDrop: active ? nearbyDrop : null,
+      nearbyRobot: active ? nearbyRobot : null,
+      pulseCooldown: Math.ceil(pulseCooldown * 10) / 10,
+      jammed: Math.ceil(jammed * 10) / 10,
+    };
+    const robot = snapshot.nearbyRobot;
+    const key = [active, snapshot.nearbyDrop?.id, robot?.id, robot?.phase, robot?.integrity,
+      snapshot.pulseCooldown, snapshot.jammed].join('|');
+    if (recoveryViewKey === key) return;
+    recoveryViewKey = key;
+    onRecoveryView(snapshot);
+  }
+
+  function reportRecovery(event) {
+    if (!event) return false;
+    recoveryVisuals?.feedback(event);
+    dirty = true;
+    onRecovery?.(event);
+    return true;
+  }
+
+  function updateRecovery(delta = 0) {
+    if (freeRecoveryWalk()) reportRecovery(recoverySimulation.update(delta, player));
+    syncRecoveryView();
   }
 
   function benchUnderPointer(clientX, clientY) {
@@ -530,6 +583,7 @@ export function createFactoryScene(canvas, options = {}) {
     if (!benchSession) setZone(mode === 'overview' ? previewPoint : nearestZone());
     syncNearbyBench();
     updateBenchMarkers();
+    updateRecovery();
   }
 
   function flyTo(getTarget, milliseconds, lift, travelInset = 0, { onStart, onFinish } = {}) {
@@ -538,6 +592,8 @@ export function createFactoryScene(canvas, options = {}) {
     canvas.style.cursor = savedCursor;
     setNearbyBench(null);
     onMode?.(mode, true);
+    if (destroyed || transition !== next) return;
+    syncRecoveryView();
     if (destroyed || transition !== next) return;
     onStart?.();
     if (destroyed || transition !== next) return;
@@ -647,12 +703,53 @@ export function createFactoryScene(canvas, options = {}) {
 
   function interact() {
     if (!layout || destroyed || transition || benchSession) return false;
+    if (freeRecoveryWalk() && reportRecovery(recoverySimulation.interact(player))) {
+      updateRecovery();
+      return true;
+    }
     const bench = mode === 'walk' && nearbyBench(player, layout);
     if (bench) return focusBench(bench.id);
     const point = mode === 'walk' ? nearestZone() : previewPoint;
     if (!point) return false;
     onInteract?.(point);
     return true;
+  }
+
+  function goRecovery(id) {
+    if (!recoverySimulation || destroyed || benchSession) return false;
+    const guide = recoverySimulation.guide(id);
+    if (!guide) return false;
+    const { x, z, yaw } = guide;
+    const { drops, robots } = recoverySimulation.state;
+    const drop = drops.find(item => item.visible && (item.id === id || item.source === id));
+    const target = drop ?? robots.find(item => item.id === id || item.partId === id);
+    const distance = Math.hypot(x - currentPose.x, z - currentPose.z);
+    const clearance = mode === 'overview' || distance > 2 || !walkLineIsClear(currentPose, guide, layout);
+    mode = 'walk';
+    player = { x, z, yaw };
+    pitch = target ? Math.atan2((drop ? 0.65 : 0.92) - EYE_HEIGHT, Math.hypot(target.x - x, target.z - z)) : -0.18;
+    heroYaw = yaw;
+    clearInput();
+    setZone(null);
+    placeHero();
+    flyToWalkingPoint(distance, walkPose, { onFinish: () => canvas.focus({ preventScroll: true }) }, clearance);
+    return true;
+  }
+
+  function pulseRecovery() {
+    if (!freeRecoveryWalk()) return false;
+    const acted = reportRecovery(recoverySimulation.pulse(player));
+    updateRecovery();
+    return acted;
+  }
+
+  function setRecoveryProgress(progress) {
+    if (destroyed) return;
+    recoveryProgress = progress;
+    if (!recoverySimulation) return;
+    recoverySimulation.setProgress(progress);
+    updateRecovery();
+    dirty = true;
   }
 
   function focusBench(id) {
@@ -764,6 +861,11 @@ export function createFactoryScene(canvas, options = {}) {
 
   function step(now) {
     if (destroyed) return;
+    const canRender = canvasVisible && !doc.hidden;
+    if (resizePending && canRender) {
+      resizePending = false;
+      resize();
+    }
     const delta = clamp((now - lastFrame) / 1000, 0, 0.05);
     lastFrame = now;
     if (transition) {
@@ -776,7 +878,11 @@ export function createFactoryScene(canvas, options = {}) {
     } else {
       updateOverview(delta);
     }
-    const canRender = canvasVisible && !doc.hidden;
+    if (canRender) {
+      updateRecovery(delta);
+      if (destroyed) return;
+      if (recoveryVisuals?.update(delta, player)) dirty = true;
+    }
     if (activity?.active && canRender) {
       activity.update(delta);
       dirty = true;
@@ -801,7 +907,10 @@ export function createFactoryScene(canvas, options = {}) {
       if (WALK_KEYS.has(event.code) || event.code === 'KeyV' || event.code === 'KeyE') event.preventDefault();
       return;
     }
-    if (event.code === 'KeyV' || event.code === 'KeyE') {
+    if (event.code === 'KeyF' && freeRecoveryWalk()) {
+      event.preventDefault();
+      if (!event.repeat) pulseRecovery();
+    } else if (event.code === 'KeyV' || event.code === 'KeyE') {
       event.preventDefault();
       if (!event.repeat) {
         if (event.code === 'KeyV') toggleMode();
@@ -919,11 +1028,13 @@ export function createFactoryScene(canvas, options = {}) {
       dirty = true;
       onStatus?.('三维车间已恢复。');
     });
+    // Resizing the drawing buffer clears it. Do it in the same frame as rendering.
+    const requestResize = () => { resizePending = true; };
     if (win.ResizeObserver) {
-      resizeObserver = new win.ResizeObserver(resize);
+      resizeObserver = new win.ResizeObserver(requestResize);
       resizeObserver.observe(canvas);
     } else {
-      listen(win, 'resize', resize);
+      listen(win, 'resize', requestResize);
     }
     if (win.IntersectionObserver) {
       visibilityObserver = new win.IntersectionObserver(([entry]) => { canvasVisible = entry.isIntersecting; });
@@ -1004,6 +1115,9 @@ export function createFactoryScene(canvas, options = {}) {
     updateWayfinding = createWayfinding(layout, scene);
     benchMarkers = createBenchMarkers(scene, layout.benches || [], doc);
     activity = createFactoryActivity(scene, layout, { reducedMotion: reducedMotion?.matches });
+    recoverySimulation = createRecoverySimulation(layout, recoveryProgress);
+    recoveryVisuals = createRecoveryVisuals(scene, recoverySimulation, { document: doc, layout, reducedMotion: reducedMotion?.matches });
+    recoveryVisuals.update(0, player);
     placeHero();
     applyPose(mode === 'overview' ? overviewPose() : walkPose());
     renderer.shadowMap.needsUpdate = true;
@@ -1025,5 +1139,6 @@ export function createFactoryScene(canvas, options = {}) {
   });
   ready.catch(() => {});
 
-  return { ready, setMode, toggleMode, jumpTo, reset, moveTouch, lookTouch, interact, focusBench, exitBench, destroy };
+  return { ready, setMode, toggleMode, jumpTo, reset, moveTouch, lookTouch, interact, focusBench, exitBench,
+    goRecovery, pulseRecovery, setRecoveryProgress, destroy };
 }

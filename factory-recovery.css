@@ -1,0 +1,151 @@
+.factory-directory > .factory-directory-switch { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.factory-directory > .factory-directory-switch button { padding-inline: .18rem; font-size: .88rem; }
+
+.recovery-directory, .recovery-assembly { display: grid; gap: .72rem; min-inline-size: 0; }
+.recovery-directory-heading, .recovery-assembly-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .65rem;
+}
+.recovery-directory-heading strong, .recovery-assembly-head > strong {
+  flex: none;
+  color: var(--mint);
+  font: 750 .88rem/1 var(--mono);
+}
+.recovery-instructions, .recovery-assembly-head p { color: var(--muted); font-size: .88rem; }
+.recovery-part-list { display: grid; gap: .36rem; margin: 0; padding: 0; list-style: none; }
+.recovery-part-row {
+  display: grid;
+  grid-template-columns: 2.3rem minmax(0, 1fr) auto;
+  gap: .42rem;
+  align-items: center;
+  min-inline-size: 0;
+  padding: .36rem;
+  background: #14231d;
+  border: 1px solid var(--line);
+  border-radius: .34rem;
+}
+.recovery-part-row > div { display: grid; gap: .17rem; min-inline-size: 0; }
+.recovery-part-row strong { font-size: .9rem; overflow-wrap: anywhere; }
+.recovery-part-row small { color: var(--muted); font-size: .73rem; line-height: 1.4; overflow-wrap: anywhere; }
+.recovery-part-art {
+  display: grid;
+  place-items: center;
+  inline-size: 100%;
+  aspect-ratio: 1;
+  padding: .16rem;
+  border: 1px solid color-mix(in srgb, var(--part-tint, var(--mint)) 48%, var(--line));
+  border-radius: .28rem;
+  color: var(--part-tint, var(--mint));
+  background: #1d3027;
+  font: 750 .67rem/1 var(--mono);
+}
+.recovery-part-art img { inline-size: 100%; block-size: 100%; object-fit: contain; pointer-events: none; }
+.recovery-compact { padding-inline: .38rem; font-size: .77rem; }
+.recovery-part-mark { color: var(--mint); font-size: .72rem; white-space: nowrap; }
+.recovery-project-heading { padding-block-start: .64rem; border-block-start: 1px solid var(--line); }
+.recovery-projects { display: grid; gap: .38rem; }
+.recovery-project { display: flex; justify-content: space-between; padding-inline: .54rem; text-align: start; font-size: .82rem; }
+.recovery-project small { flex: none; color: var(--mint); }
+
+.recovery-contact {
+  position: absolute;
+  z-index: 2;
+  inset: 4.2rem auto auto .78rem;
+  display: grid;
+  gap: .18rem;
+  inline-size: min(12.5rem, calc(100% - 1.56rem));
+  padding: .48rem .63rem;
+  border: 1px solid #778e82;
+  border-inline-start: .21rem solid #9aaba2;
+  border-radius: .34rem;
+  color: var(--paper);
+  background: #14241eef;
+  pointer-events: none;
+}
+.recovery-contact strong { font-size: .88rem; }
+.recovery-contact span { color: var(--muted); font-size: .78rem; }
+.recovery-contact meter { inline-size: 100%; block-size: .55rem; accent-color: var(--amber); }
+.recovery-contact[data-phase="telegraph"] { border-inline-start-color: #ffab95; }
+.recovery-contact[data-phase="vulnerable"] { border-inline-start-color: var(--amber); }
+.recovery-contact[data-phase="vulnerable"] span { color: #ffd392; }
+.recovery-feed {
+  position: absolute;
+  z-index: 2;
+  inset: auto auto 1rem 50%;
+  transform: translateX(-50%);
+  inline-size: max-content;
+  max-inline-size: min(17rem, calc(100% - 2rem));
+  padding: .37rem .65rem;
+  border: 1px solid #8ebb9e;
+  border-radius: .3rem;
+  color: #c9f3d9;
+  background: #13241bea;
+  text-align: center;
+  font-size: .84rem;
+  pointer-events: none;
+}
+.recovery-feed[data-tone="warning"] { color: #ffccaf; border-color: #bd836a; }
+.recovery-pulse {
+  position: absolute;
+  z-index: 2;
+  inset: auto .78rem .78rem auto;
+  min-inline-size: 5.8rem;
+  padding-inline: .68rem;
+  border-color: #98c6b4;
+  color: #15271e;
+  background: #aee1c6;
+  box-shadow: 0 2px 12px #0007;
+}
+.recovery-pulse:hover:not(:disabled) { background: #c5f1d8; }
+.recovery-pulse kbd { font: 750 .76rem var(--mono); padding: .14rem .25rem; border: 1px solid #577b67; border-radius: .2rem; }
+.factory-scene:has(.factory-interact:not([hidden])) .recovery-pulse { inset-block-end: calc(var(--control-size) + 1.18rem); }
+.factory-scene:has(.recovery-pulse:not([hidden])) .factory-bench-hint { inset-block-end: calc(2 * var(--control-size) + 1.58rem); }
+
+.recovery-bench-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.recovery-assembly-head { align-items: center; padding: .62rem .7rem; border: 1px solid var(--line); border-radius: .36rem; background: #15241d; }
+.recovery-assembly-head h3 { margin-block-end: .2rem; }
+.recovery-label { color: var(--muted); font-size: .78rem; }
+.recovery-inventory { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .43rem; }
+.recovery-piece {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: .3rem;
+  min-inline-size: 0;
+  min-block-size: 5.6rem;
+  padding: .5rem .28rem;
+  color: var(--paper);
+  background: #1b3027;
+  border: 1px solid #577264;
+  border-radius: .32rem;
+  font-size: .81rem;
+  font-weight: 700;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.recovery-piece .recovery-part-art { inline-size: min(2.45rem, 100%); }
+.recovery-piece:hover { border-color: var(--mint); }
+.recovery-piece[aria-pressed="true"] { border-color: var(--amber); background: #3b3424; }
+.recovery-slot { border-style: dashed; background: #152720; }
+.recovery-slot small { color: var(--muted); font-size: .7rem; }
+.recovery-slot[data-installed="true"] { border-style: solid; border-color: #89bd9e; }
+.recovery-slot[data-installed="true"] small { color: var(--mint); }
+.recovery-empty, .recovery-assembly-note {
+  min-block-size: 2.85rem;
+  padding: .5rem .62rem;
+  border-inline-start: 2px solid #678b78;
+  color: var(--muted);
+  background: #14261e;
+  font-size: .83rem;
+}
+.recovery-assembly-note[data-tone="wrong"] { border-color: var(--danger); color: var(--danger); }
+.recovery-assembly-note[data-tone="good"] { border-color: var(--mint); color: var(--mint); }
+
+@media (max-width: 47.5rem), (pointer: coarse) {
+  .recovery-pulse kbd { display: none; }
+  .recovery-pulse { min-inline-size: 4.4rem; }
+  .recovery-feed { inset-block-end: 7.15rem; }
+  .recovery-contact { inline-size: 10.9rem; }
+}

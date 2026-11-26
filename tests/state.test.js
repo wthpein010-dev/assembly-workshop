@@ -14,9 +14,11 @@ test('role validation covers Chinese, short input and HTML', () => {
 test('state keeps training and economy after reload, with safe defaults for invalid saves', () => {
   const map = new Map();
   const storage = { getItem: key => map.get(key), setItem: (key, val) => map.set(key, val) };
-  const player = { ...initialState(), profile: profileFrom({ name: '练习班员' }), xp: 140, coins: 65, track: { active: 'memory' } };
+  const player = { ...initialState(), profile: profileFrom({ name: '练习班员' }), xp: 140, coins: 65, track: { active: 'memory' },
+    recovery: { collected: ['memory', 'fan'], installed: ['memory'] } };
   assert.equal(persistSave(storage, player), true);
   assert.deepEqual(loadSave(storage), player);
   assert.deepEqual(levelAt(player.xp), { level: 2, current: 20, max: 120 });
+  assert.deepEqual(normalizeSave({ version: 1, recovery: { collected: ['invalid'] } }).recovery, { collected: [], installed: [] });
   assert.deepEqual(normalizeSave({ version: 2 }), initialState());
 });

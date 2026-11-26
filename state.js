@@ -1,3 +1,5 @@
+import { normalizeRecovery } from './factory-recovery.js';
+
 export const SAVE_KEY = 'assembly-workshop.progress.v1';
 export const WORK_GROUPS = ['装配一组', '质检二组', '设备支持组'];
 export const FACE_LABELS = ['标准', '清秀', '英气', '稳重'];
@@ -8,7 +10,7 @@ export function initialState() {
   return {
     version: 1, profile: null, xp: 0, coins: 240,
     skills: { assembly: 0, quality: 0, repair: 0 },
-    track: null, community: null, onlineCompleted: [],
+    track: null, community: null, recovery: normalizeRecovery(), onlineCompleted: [],
   };
 }
 
@@ -41,6 +43,7 @@ export function normalizeSave(value) {
     skills: Object.fromEntries(['assembly', 'quality', 'repair'].map(key => [key, count(value.skills?.[key])])),
     track: object(value.track),
     community: object(value.community),
+    recovery: normalizeRecovery(value.recovery),
     onlineCompleted: Array.isArray(value.onlineCompleted) ? value.onlineCompleted.filter(id => typeof id === 'string').slice(-80) : [],
   };
 }

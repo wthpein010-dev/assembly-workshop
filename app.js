@@ -51,13 +51,13 @@ function toast(message) {
   toastTimer = setTimeout(() => notice.classList.remove('visible'), 3400);
 }
 
-function commit(mutator) {
+function commit(mutator, { renderPage = true } = {}) {
   const next = structuredClone(state);
   const result = mutator(next);
   state = next;
   if (!persistSave(localStorage, state)) toast('此浏览器暂时无法写入本地存档。');
   cloud.queue();
-  render();
+  if (renderPage) render();
   return result;
 }
 

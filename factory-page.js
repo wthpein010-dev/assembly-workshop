@@ -1,4 +1,6 @@
 import { mountFactoryWorkbench } from './factory-workbenches.js';
+import { installRecoveryPart, normalizeRecovery, RECOVERY_PARTS, RECOVERY_RECIPES } from './factory-recovery.js';
+import { recoveryAssembly, recoveryCatalog, recoveryEventText, recoveryPhaseLabel, recoveryRecipeFor } from './factory-recovery-ui.js';
 
 const zones = [
   { id: 'entrance', label: '车间入口', blurb: '沿车间主通道前进，进入各个作业区。' },
@@ -47,18 +49,21 @@ export function factoryPage(ctx) {
               <button type="button" class="btn btn-primary" data-factory-action="retry">重试</button>
             </div>
             <div class="factory-crosshair" aria-hidden="true"></div>
+            <div class="recovery-contact" data-recovery-contact hidden><strong data-recovery-target></strong><meter data-recovery-integrity min="0" max="1" value="1" aria-label="故障机核心耐久"></meter><span data-recovery-phase></span></div>
+            <p class="recovery-feed" data-recovery-feed role="status" hidden></p>
             <p class="factory-bench-hint" data-factory-bench-hint hidden></p>
             <div class="factory-stick" data-factory-move aria-hidden="true">
               <span class="factory-stick-knob"></span>
             </div>
             <button type="button" class="btn btn-primary factory-interact" data-factory-action="interact" hidden>互动</button>
+            <button type="button" class="btn recovery-pulse" data-recovery-pulse hidden><span>脉冲</span><kbd>F</kbd></button>
           </div>
           <div class="factory-console" id="factory-controls">
             <p data-factory-controls hidden>
               <span class="factory-overview-help">点编号进入工作台 · 点击画面后 <kbd>WASD</kbd> / 方向键平移 · 右键拖拽 · 滚轮缩放</span>
               <span class="factory-pan-touch-help">拖动地图平移，点编号进入工作台。</span>
-              <span class="factory-key-help"><kbd>WASD</kbd> / <kbd>方向键</kbd> 移动 · 点击画面转向 · 靠近工作台按 <kbd>E</kbd> 操作 · <kbd>Esc</kbd> 释放</span>
-              <span class="factory-touch-help">左侧圆盘移动，拖动画面转向。靠近工作台后点「操作工作台」。</span>
+              <span class="factory-key-help"><kbd>WASD</kbd> / <kbd>方向键</kbd> 移动 · 点击画面转向 · <kbd>E</kbd> 操作或拾取 · <kbd>F</kbd> 对准故障机发脉冲 · <kbd>Esc</kbd> 释放</span>
+              <span class="factory-touch-help">左侧圆盘移动，拖动画面转向。靠近零件可拾取，遇到故障机可发脉冲。</span>
             </p>
             <button type="button" class="btn btn-secondary" data-factory-action="reset" hidden>回到入口</button>
           </div>
@@ -69,7 +74,9 @@ export function factoryPage(ctx) {
           <div class="factory-directory-switch" role="group" aria-label="导览内容" data-factory-catalog-switch hidden>
             <button type="button" data-factory-catalog="benches" aria-pressed="false" aria-controls="factory-benches">工作台</button>
             <button type="button" data-factory-catalog="zones" aria-pressed="true" aria-controls="factory-zones">区域</button>
+            <button type="button" data-factory-catalog="recovery" aria-pressed="false" aria-controls="factory-recovery">零件回收</button>
           </div>
+          <div id="factory-recovery" class="recovery-directory" data-recovery-directory hidden></div>
           <div id="factory-benches" class="factory-points" data-factory-benches role="group" aria-label="进入工作台" hidden></div>
           <div id="factory-zones" class="factory-zones" data-factory-zones>
             <div class="factory-points" data-factory-points role="group" aria-label="定位区域"></div>
@@ -86,7 +93,12 @@ export function factoryPage(ctx) {
             <button type="button" class="btn btn-secondary" data-factory-action="leave-bench">离开工作台</button>
           </header>
           <p class="factory-bench-transition" data-factory-bench-message role="status"></p>
+          <div class="factory-directory-switch recovery-bench-tabs" data-recovery-tabs role="group" aria-label="工作台玩法" hidden>
+            <button type="button" data-recovery-bench="practice" aria-pressed="true">工序练习</button>
+            <button type="button" data-recovery-bench="assembly" aria-pressed="false">零件组装</button>
+          </div>
           <div data-factory-bench-game></div>
+          <div class="recovery-assembly" data-recovery-assembly hidden></div>
         </section>
       </div>
       <nav class="factory-destinations" aria-label="工坊活动">
@@ -125,6 +137,15 @@ export function bindFactoryPage(root, ctx) {
   const benchMessage = find('[data-factory-bench-message]');
   const benchGame = find('[data-factory-bench-game]');
   const benchHint = find('[data-factory-bench-hint]');
+  const recoveryDirectory = find('[data-recovery-directory]');
+  const recoveryTabs = find('[data-recovery-tabs]');
+  const recoveryAssemblyHost = find('[data-recovery-assembly]');
+  const recoveryContact = find('[data-recovery-contact]');
+  const recoveryTarget = find('[data-recovery-target]');
+  const recoveryIntegrity = find('[data-recovery-integrity]');
+  const recoveryPhase = find('[data-recovery-phase]');
+  const recoveryFeed = find('[data-recovery-feed]');
+  const pulse = find('[data-recovery-pulse]');
   const pointGroup = find('[data-factory-points]');
   const pointButtons = zones.map(point => {
     const button = page.ownerDocument.createElement('button');
@@ -164,6 +185,14 @@ export function bindFactoryPage(root, ctx) {
   let unmountGame;
   let catalog = 'zones';
   let catalogTouched = false;
+  let recoveryProgress = normalizeRecovery(ctx.state().recovery);
+  let recoveryView;
+  let recoveryFeedTimer;
+  let currentRecipe;
+  let requestedRecipe;
+  let selectedPart;
+  let draggedPart;
+  let assemblyMessage;
   let disposed = false;
 
   function announce(text) {
@@ -190,7 +219,71 @@ export function bindFactoryPage(root, ctx) {
     catalog = name;
     benchList.hidden = name !== 'benches';
     zoneCatalog.hidden = name !== 'zones';
+    recoveryDirectory.hidden = name !== 'recovery';
     for (const button of catalogButtons) button.setAttribute('aria-pressed', String(button.dataset.factoryCatalog === name));
+  }
+
+  function saveRecovery(next) {
+    recoveryProgress = normalizeRecovery(next);
+    ctx.commit(state => { state.recovery = recoveryProgress; }, { renderPage: false });
+    recoveryDirectory.innerHTML = recoveryCatalog(recoveryProgress, ctx);
+  }
+
+  function showRecoveryEvent(event) {
+    if (event.type === 'collect') saveRecovery(event.progress);
+    const text = recoveryEventText(event);
+    if (!text) return;
+    clearTimeout(recoveryFeedTimer);
+    recoveryFeed.hidden = false;
+    recoveryFeed.dataset.tone = event.type === 'stagger' || ['guarded', 'jammed', 'miss'].includes(event.outcome) ? 'warning' : 'good';
+    recoveryFeed.textContent = text;
+    recoveryFeedTimer = setTimeout(() => { recoveryFeed.hidden = true; }, 2300);
+  }
+
+  function dismissRecoveryFeed() {
+    clearTimeout(recoveryFeedTimer);
+    recoveryFeed.hidden = true;
+  }
+
+  function renderRecoveryAssembly() {
+    recoveryAssemblyHost.innerHTML = recoveryAssembly(currentRecipe, recoveryProgress, selectedPart, assemblyMessage, ctx);
+  }
+
+  function showBenchTab(tab) {
+    benchGame.hidden = tab !== 'practice';
+    recoveryAssemblyHost.hidden = tab !== 'assembly';
+    for (const button of recoveryTabs.querySelectorAll('[data-recovery-bench]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.recoveryBench === tab));
+    }
+    if (tab === 'assembly') renderRecoveryAssembly();
+  }
+
+  function choosePart(id) {
+    selectedPart = id;
+    for (const button of recoveryAssemblyHost.querySelectorAll('[data-recovery-part]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.recoveryPart === id));
+    }
+  }
+
+  function placeRecoveryPart(partId, slotId) {
+    const note = recoveryAssemblyHost.querySelector('[data-recovery-assembly-note]');
+    if (!partId || partId !== slotId) {
+      assemblyMessage = { tone: 'wrong', text: partId ? `这个槽位需要${RECOVERY_PARTS[slotId].name}。` : '请先选一个已回收的零件。' };
+      note.dataset.tone = assemblyMessage.tone;
+      note.textContent = assemblyMessage.text;
+      return;
+    }
+    const next = installRecoveryPart(recoveryProgress, currentRecipe.id, partId);
+    if (!next) return;
+    const complete = currentRecipe.parts.every(id => next.installed.includes(id));
+    selectedPart = undefined;
+    draggedPart = undefined;
+    assemblyMessage = { tone: 'good', text: complete ? `${currentRecipe.name}已启动。` : `${RECOVERY_PARTS[partId].name}已装入。` };
+    saveRecovery(next);
+    scene.setRecoveryProgress(recoveryProgress);
+    renderRecoveryAssembly();
+    const target = recoveryAssemblyHost.querySelector('[data-recovery-part]') ?? recoveryTabs.querySelector('[aria-pressed="true"]');
+    target?.focus({ preventScroll: true });
   }
 
   function markPracticed(id) {
@@ -229,23 +322,43 @@ export function bindFactoryPage(root, ctx) {
   function syncControls() {
     const working = Boolean(benchSession);
     const canInteract = ready && !working && !transitioning && mode === 'walk';
+    const part = canInteract && RECOVERY_PARTS[recoveryView?.nearbyDrop?.partId];
+    const robot = canInteract && recoveryView?.nearbyRobot;
     for (const button of modeButtons) button.disabled = !ready || working;
     reset.hidden = !ready || working;
-    interact.hidden = !canInteract || !(nearbyBench || walkPoint?.route);
-    interact.textContent = nearbyBench ? '操作工作台' : '互动';
-    interact.setAttribute('aria-label', nearbyBench ? `操作${nearbyBench.label}` : '互动');
-    benchHint.hidden = !canInteract || !nearbyBench;
-    benchHint.textContent = nearbyBench?.label ?? '';
+    interact.hidden = !canInteract || !(part || nearbyBench || walkPoint?.route);
+    interact.textContent = part ? '拾取零件' : nearbyBench ? '操作工作台' : '互动';
+    interact.setAttribute('aria-label', part ? `拾取${part.name}` : nearbyBench ? `操作${nearbyBench.label}` : '互动');
+    benchHint.hidden = !canInteract || !(part || nearbyBench);
+    benchHint.textContent = part?.name ?? nearbyBench?.label ?? '';
+    pulse.hidden = !robot;
+    pulse.disabled = Boolean(robot && (recoveryView.pulseCooldown > 0 || recoveryView.jammed > 0));
+    recoveryContact.hidden = !robot;
+    if (robot) {
+      recoveryTarget.textContent = robot.name;
+      recoveryIntegrity.max = robot.maxIntegrity;
+      recoveryIntegrity.value = robot.integrity;
+      recoveryPhase.textContent = recoveryView.jammed > 0 ? '脉冲受干扰' : recoveryPhaseLabel(robot.phase, robot.type);
+      recoveryContact.dataset.phase = robot.phase;
+    }
     showFullscreen();
   }
 
   function showBench(bench, phase) {
     unmountGame?.();
     unmountGame = undefined;
+    recoveryTabs.hidden = true;
+    recoveryAssemblyHost.hidden = true;
+    recoveryAssemblyHost.replaceChildren();
+    currentRecipe = undefined;
+    selectedPart = undefined;
+    draggedPart = undefined;
+    assemblyMessage = undefined;
     benchSession = phase === 'closed' ? null : bench;
     directory.hidden = Boolean(benchSession);
     benchPanel.hidden = !benchSession;
     if (!benchSession) {
+      requestedRecipe = undefined;
       delete sceneLayout.dataset.benchPhase;
       delete stage.dataset.benchPhase;
       location.textContent = walkPoint?.label ?? '车间通道';
@@ -265,11 +378,16 @@ export function bindFactoryPage(root, ctx) {
       stopMoving();
       stopLooking();
       announce('');
+      dismissRecoveryFeed();
       if (doc.fullscreenElement === stage) void doc.exitFullscreen().catch(() => {});
       if (stage.getBoundingClientRect().top < 0) stage.scrollIntoView({ block: 'start' });
     }
     if (phase === 'ready') {
       unmountGame = mountFactoryWorkbench(benchGame, { id: bench.id, onComplete: () => markPracticed(bench.id) });
+      currentRecipe = recoveryRecipeFor(bench.id);
+      recoveryTabs.hidden = !currentRecipe;
+      showBenchTab(currentRecipe && requestedRecipe === currentRecipe.id ? 'assembly' : 'practice');
+      requestedRecipe = undefined;
       benchTitle.focus({ preventScroll: true });
     }
   }
@@ -352,6 +470,7 @@ export function bindFactoryPage(root, ctx) {
     stopLooking();
     scene?.destroy();
     scene = undefined;
+    recoveryView = undefined;
     if (current > 1) {
       const replacement = canvas.cloneNode(false);
       canvas.replaceWith(replacement);
@@ -365,6 +484,7 @@ export function bindFactoryPage(root, ctx) {
       const { createFactoryScene } = await import('./factory-view.js');
       if (!active()) return;
       scene = createFactoryScene(canvas, {
+        recovery: recoveryProgress,
         onProgress(value) {
           if (active() && Number.isFinite(value)) progress.value = Math.min(1, Math.max(0, value));
         },
@@ -400,6 +520,14 @@ export function bindFactoryPage(root, ctx) {
         onStatus(text) {
           if (active() && !benchSession) announce(text ?? '');
         },
+        onRecovery(event) {
+          if (active()) showRecoveryEvent(event);
+        },
+        onRecoveryView(snapshot) {
+          if (!active()) return;
+          recoveryView = snapshot;
+          syncControls();
+        },
         onInteract(point) {
           if (!active() || !point) return;
           showPoint(point.id);
@@ -409,6 +537,7 @@ export function bindFactoryPage(root, ctx) {
       });
       await scene.ready;
       if (!active()) return;
+      recoveryDirectory.innerHTML = recoveryCatalog(recoveryProgress, ctx);
       showState('ready');
       if (selected !== 'entrance') scene.jumpTo(selected);
     } catch {
@@ -435,10 +564,41 @@ export function bindFactoryPage(root, ctx) {
   const canWalk = () => ready && scene && mode === 'walk' && !transitioning && !benchSession;
   page.addEventListener('click', event => {
     const button = event.target.closest('button');
-    if (!button) return;
+    if (!button || button.disabled) return;
     if (button.dataset.factoryCatalog) {
       catalogTouched = true;
       showCatalog(button.dataset.factoryCatalog);
+      return;
+    }
+    if (button.dataset.recoveryGuide && ready && !benchSession) {
+      dismissRecoveryFeed();
+      focusAfterMode = true;
+      if (!scene.goRecovery(button.dataset.recoveryGuide)) focusAfterMode = false;
+      if (stage.getBoundingClientRect().top < 0) stage.scrollIntoView({ block: 'start' });
+      return;
+    }
+    if (button.dataset.recoveryBuild && ready && !benchSession) {
+      const recipe = RECOVERY_RECIPES[button.dataset.recoveryBuild];
+      requestedRecipe = recipe.id;
+      if (!scene.focusBench(recipe.bench)) requestedRecipe = undefined;
+      return;
+    }
+    if (button.dataset.recoveryBench && currentRecipe) {
+      showBenchTab(button.dataset.recoveryBench);
+      return;
+    }
+    if (button.dataset.recoveryPart && currentRecipe) {
+      choosePart(button.dataset.recoveryPart === selectedPart ? undefined : button.dataset.recoveryPart);
+      if (selectedPart && event.detail === 0) recoveryAssemblyHost.querySelector('[data-recovery-slot]:enabled')?.focus({ preventScroll: true });
+      return;
+    }
+    if (button.dataset.recoverySlot && currentRecipe) {
+      placeRecoveryPart(selectedPart, button.dataset.recoverySlot);
+      return;
+    }
+    if ('recoveryPulse' in button.dataset && canWalk()) {
+      canvas.focus({ preventScroll: true });
+      scene.pulseRecovery();
       return;
     }
     if (button.dataset.factoryBench && ready && !benchSession) {
@@ -465,8 +625,34 @@ export function bindFactoryPage(root, ctx) {
       scene.reset();
       showPoint('entrance');
     }
-    if (action === 'interact' && canWalk()) scene.interact();
+    if (action === 'interact' && canWalk()) {
+      canvas.focus({ preventScroll: true });
+      scene.interact();
+    }
   }, eventOptions);
+
+  recoveryAssemblyHost.addEventListener('dragstart', event => {
+    const source = event.target.closest('[data-recovery-part]');
+    if (!source || !event.dataTransfer) return;
+    draggedPart = source.dataset.recoveryPart;
+    choosePart(draggedPart);
+    event.dataTransfer.setData('text/plain', draggedPart);
+    event.dataTransfer.effectAllowed = 'move';
+  }, eventOptions);
+  recoveryAssemblyHost.addEventListener('dragover', event => {
+    if (!draggedPart || !event.target.closest('[data-recovery-slot]:enabled') || !event.dataTransfer) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, eventOptions);
+  recoveryAssemblyHost.addEventListener('drop', event => {
+    const slot = event.target.closest('[data-recovery-slot]:enabled');
+    if (!slot || !draggedPart || event.dataTransfer?.getData('text/plain') !== draggedPart) return;
+    event.preventDefault();
+    const part = draggedPart;
+    draggedPart = undefined;
+    placeRecoveryPart(part, slot.dataset.recoverySlot);
+  }, eventOptions);
+  recoveryAssemblyHost.addEventListener('dragend', () => { draggedPart = undefined; }, eventOptions);
 
   stick.addEventListener('pointerdown', event => {
     if (!canWalk() || movePointer !== null || event.button !== 0) return;
@@ -511,6 +697,7 @@ export function bindFactoryPage(root, ctx) {
     stopMoving();
     stopLooking();
     unmountGame?.();
+    dismissRecoveryFeed();
     listeners.abort();
     if (doc.fullscreenElement === stage) void doc.exitFullscreen().catch(() => {});
     scene?.destroy();
