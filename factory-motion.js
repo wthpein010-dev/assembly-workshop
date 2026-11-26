@@ -1,5 +1,6 @@
 export const EYE_HEIGHT = 1.62;
 export const PLAYER_RADIUS = 0.28;
+export const BENCH_RANGE = 1.70;
 
 export const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
@@ -97,6 +98,81 @@ export function movePlayer({ x, z }, dx, dz, { bounds, obstacles }, radius = PLA
       bounds.minZ + radius, bounds.maxZ - radius);
   }
   return { x, z };
+}
+
+export function walkLineIsClear(from, to, layout) {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.12));
+  for (let index = 0; index <= steps; index++) {
+    const ratio = index / steps;
+    if (!isStandable({ x: from.x + dx * ratio, z: from.z + dz * ratio }, layout)) return false;
+  }
+  return true;
+}
+
+export function nearbyBench(position, layout, range = BENCH_RANGE) {
+  let nearest = null;
+  let distance = range;
+  for (const bench of layout.benches || []) {
+    const length = Math.hypot(position.x - bench.x, position.z - bench.z);
+    if (length < distance && walkLineIsClear(position, bench, layout)) {
+      nearest = bench;
+      distance = length;
+    }
+  }
+  return nearest;
+}
+
+export function benchCameraPose(bench, layout) {
+  let position = nearestStandable(bench, layout);
+  if (!position) return null;
+  const { target } = bench;
+  const dx = target.x - position.x;
+  const dz = target.z - position.z;
+  const depth = Math.hypot(dx, dz);
+  if (depth < 0.01) return null;
+  const retreat = Math.max(0, 1.32 - depth);
+  if (retreat) position = movePlayer(position, -dx * retreat / depth, -dz * retreat / depth, layout);
+
+  const across = target.x - position.x;
+  const forward = target.z - position.z;
+  return {
+    ...position, y: EYE_HEIGHT, yaw: Math.atan2(across, forward),
+    pitch: Math.atan2(target.y - EYE_HEIGHT, Math.hypot(across, forward)), fov: 50,
+  };
+}
+
+export function spreadBadgePositions(anchors, gap, maxShift) {
+  const badges = anchors.map(({ x, y }) => ({ x, y }));
+  const move = (index, x, y) => {
+    const badge = badges[index];
+    const anchor = anchors[index];
+    const dx = badge.x + x - anchor.x;
+    const dy = badge.y + y - anchor.y;
+    const scale = Math.min(1, maxShift / Math.hypot(dx, dy));
+    badge.x = anchor.x + dx * scale;
+    badge.y = anchor.y + dy * scale;
+  };
+  for (let pass = 0; pass < 7; pass++) {
+    let moved = false;
+    for (let index = 0; index < badges.length; index++) {
+      for (let other = index + 1; other < badges.length; other++) {
+        const dx = badges[other].x - badges[index].x;
+        const dy = badges[other].y - badges[index].y;
+        const distance = Math.hypot(dx, dy);
+        if (distance >= gap - 0.01) continue;
+        const amount = (gap - distance) / 2;
+        const x = distance ? dx * amount / distance : amount;
+        const y = distance ? dy * amount / distance : 0;
+        move(index, -x, -y);
+        move(other, x, y);
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return badges;
 }
 
 export function sampleCameraTransition(from, to, progress, lift = 0, travelInset = 0) {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   EYE_HEIGHT, PLAYER_RADIUS, movementVector, movePlayer, nearestStandable,
   isStandable, sampleCameraTransition, wrapAngle, overviewDistance, shiftOverview, dampOverview,
+  benchCameraPose, nearbyBench, spreadBadgePositions,
 } from '../factory-motion.js';
 
 const layout = {
@@ -108,4 +109,40 @@ test('overview easing preserves similar movement at different frame rates', () =
   close(short.z, long.z);
   close(short.zoom, long.zoom);
   assert.ok(long.x > 0 && long.x < target.x && long.zoom < start.zoom && long.zoom > target.zoom);
+});
+
+test('nearby interaction takes the nearest reachable bench from this side of equipment', () => {
+  const blocked = { id: 'behind', x: 2.45, z: 0 };
+  const reachable = { id: 'front', x: 1.2, z: 1.15 };
+  const farther = { id: 'far', x: 1.6, z: -1.9 };
+  const workroom = { ...layout, benches: [blocked, reachable, farther] };
+  assert.equal(nearbyBench({ x: 1.6, z: 0 }, workroom), reachable);
+  assert.equal(nearbyBench({ x: -2, z: 0 }, workroom), null);
+});
+
+test('bench camera stays at natural eye height and sights the worktop from a legal aisle', () => {
+  const bench = { x: 0, z: 2, target: { x: 0.16, y: 1.04, z: 1.14 } };
+  const pose = benchCameraPose(bench, layout);
+  assert.ok(isStandable(pose, layout));
+  close(pose.y, EYE_HEIGHT);
+  const rise = Math.tan(pose.pitch) * Math.hypot(bench.target.x - pose.x, bench.target.z - pose.z);
+  close(pose.y + rise, bench.target.y);
+  close(pose.x + Math.sin(pose.yaw) * Math.hypot(bench.target.x - pose.x, bench.target.z - pose.z), bench.target.x);
+  assert.ok(pose.pitch < -0.1 && pose.pitch > -0.48);
+  assert.ok(pose.fov >= 44 && pose.fov <= 53);
+});
+
+test('bench camera gives up extra retreat before crossing a wall', () => {
+  const bench = { x: 0, z: 4.65, target: { x: 0, y: 1.05, z: 3.9 } };
+  const pose = benchCameraPose(bench, layout);
+  assert.ok(isStandable(pose, layout));
+  close(pose.z, layout.bounds.maxZ - PLAYER_RADIUS);
+});
+
+test('crowded overhead badges separate while staying close to their worktops', () => {
+  const anchors = [{ x: 74, y: 49 }, { x: 81, y: 52 }, { x: 173, y: 126 }];
+  const badges = spreadBadgePositions(anchors, 34, 20);
+  assert.ok(Math.hypot(badges[1].x - badges[0].x, badges[1].y - badges[0].y) >= 33.9);
+  assert.deepEqual(badges[2], anchors[2]);
+  assert.ok(Math.hypot(badges[0].x - anchors[0].x, badges[0].y - anchors[0].y) <= 20);
 });

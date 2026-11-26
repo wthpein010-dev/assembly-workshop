@@ -1,3 +1,5 @@
+import { mountFactoryWorkbench } from './factory-workbenches.js';
+
 const zones = [
   { id: 'entrance', label: '车间入口', blurb: '沿车间主通道前进，进入各个作业区。' },
   { id: 'warehouse', label: '收货与仓储', blurb: '来料在这里点收、上架，再按工单发往生产线。' },
@@ -21,7 +23,7 @@ export function factoryPage(ctx) {
         <h1 id="factory-title">工坊地图</h1>
         <a class="btn btn-secondary" href="#hall">返回大厅</a>
       </div>
-      <div class="factory-layout">
+      <div class="factory-layout" data-factory-layout>
         <div class="factory-viewer">
           <div class="factory-scene" data-factory-scene data-state="loading" data-mode="overview" aria-busy="true">
             <img class="factory-fallback" src="${escape(ctx.asset('yard'))}" alt="" draggable="false">
@@ -45,6 +47,7 @@ export function factoryPage(ctx) {
               <button type="button" class="btn btn-primary" data-factory-action="retry">重试</button>
             </div>
             <div class="factory-crosshair" aria-hidden="true"></div>
+            <p class="factory-bench-hint" data-factory-bench-hint hidden></p>
             <div class="factory-stick" data-factory-move aria-hidden="true">
               <span class="factory-stick-knob"></span>
             </div>
@@ -52,25 +55,39 @@ export function factoryPage(ctx) {
           </div>
           <div class="factory-console" id="factory-controls">
             <p data-factory-controls hidden>
-              <span class="factory-overview-help">点击画面后 <kbd>WASD</kbd> / <kbd>方向键</kbd> 平移 · 右键拖拽 · 滚轮缩放 · <kbd>V</kbd> 切换视角</span>
-              <span class="factory-pan-touch-help">拖动画面平移，点区域聚焦。</span>
-              <span class="factory-key-help"><kbd>WASD</kbd> / <kbd>方向键</kbd> 移动 · 点击画面用鼠标转向 · <kbd>Esc</kbd> 释放 · <kbd>V</kbd> 切换视角 · <kbd>E</kbd> 互动</span>
-              <span class="factory-touch-help">左侧圆盘移动，拖动画面转向。</span>
+              <span class="factory-overview-help">点编号进入工作台 · 点击画面后 <kbd>WASD</kbd> / 方向键平移 · 右键拖拽 · 滚轮缩放</span>
+              <span class="factory-pan-touch-help">拖动地图平移，点编号进入工作台。</span>
+              <span class="factory-key-help"><kbd>WASD</kbd> / <kbd>方向键</kbd> 移动 · 点击画面转向 · 靠近工作台按 <kbd>E</kbd> 操作 · <kbd>Esc</kbd> 释放</span>
+              <span class="factory-touch-help">左侧圆盘移动，拖动画面转向。靠近工作台后点「操作工作台」。</span>
             </p>
             <button type="button" class="btn btn-secondary" data-factory-action="reset" hidden>回到入口</button>
           </div>
           <p class="factory-notice" data-factory-announcement role="status" aria-live="polite"></p>
         </div>
-        <aside class="factory-directory" aria-labelledby="factory-directory-title">
-          <h2 id="factory-directory-title">区域导览</h2>
-          <div class="factory-points" data-factory-points role="group" aria-label="定位区域">
+        <aside class="factory-directory" data-factory-directory aria-labelledby="factory-directory-title">
+          <h2 id="factory-directory-title">车间导览</h2>
+          <div class="factory-directory-switch" role="group" aria-label="导览内容" data-factory-catalog-switch hidden>
+            <button type="button" data-factory-catalog="benches" aria-pressed="false" aria-controls="factory-benches">工作台</button>
+            <button type="button" data-factory-catalog="zones" aria-pressed="true" aria-controls="factory-zones">区域</button>
           </div>
-          <div class="factory-detail">
-            <h3 data-factory-active-zone>${escape(zones[0].label)}</h3>
-            <p data-factory-blurb>${escape(zones[0].blurb)}</p>
-            <a class="btn btn-secondary" href="#missions" data-factory-training hidden>打开任务手册</a>
+          <div id="factory-benches" class="factory-points" data-factory-benches role="group" aria-label="进入工作台" hidden></div>
+          <div id="factory-zones" class="factory-zones" data-factory-zones>
+            <div class="factory-points" data-factory-points role="group" aria-label="定位区域"></div>
+            <div class="factory-detail">
+              <h3 data-factory-active-zone>${escape(zones[0].label)}</h3>
+              <p data-factory-blurb>${escape(zones[0].blurb)}</p>
+              <a class="btn btn-secondary" href="#missions" data-factory-training hidden>打开任务手册</a>
+            </div>
           </div>
         </aside>
+        <section class="factory-bench-panel" data-factory-bench-panel aria-labelledby="factory-bench-title" hidden>
+          <header class="factory-bench-header">
+            <h2 id="factory-bench-title" data-factory-bench-title tabindex="-1"></h2>
+            <button type="button" class="btn btn-secondary" data-factory-action="leave-bench">离开工作台</button>
+          </header>
+          <p class="factory-bench-transition" data-factory-bench-message role="status"></p>
+          <div data-factory-bench-game></div>
+        </section>
       </div>
       <nav class="factory-destinations" aria-label="工坊活动">
         ${destinations.map(([route, label]) => `<a class="btn btn-secondary" href="#${route}">${label}</a>`).join('')}
@@ -83,6 +100,7 @@ export function bindFactoryPage(root, ctx) {
   if (!page) return () => {};
 
   const find = selector => page.querySelector(selector);
+  const sceneLayout = find('[data-factory-layout]');
   const stage = find('[data-factory-scene]');
   const canvasSelector = '[data-factory-canvas]';
   let canvas = find(canvasSelector);
@@ -97,6 +115,16 @@ export function bindFactoryPage(root, ctx) {
   const stick = find('[data-factory-move]');
   const location = find('[data-factory-location]');
   const announcement = find('[data-factory-announcement]');
+  const directory = find('[data-factory-directory]');
+  const catalogSwitch = find('[data-factory-catalog-switch]');
+  const catalogButtons = [...catalogSwitch.querySelectorAll('[data-factory-catalog]')];
+  const benchList = find('[data-factory-benches]');
+  const zoneCatalog = find('[data-factory-zones]');
+  const benchPanel = find('[data-factory-bench-panel]');
+  const benchTitle = find('[data-factory-bench-title]');
+  const benchMessage = find('[data-factory-bench-message]');
+  const benchGame = find('[data-factory-bench-game]');
+  const benchHint = find('[data-factory-bench-hint]');
   const pointGroup = find('[data-factory-points]');
   const pointButtons = zones.map(point => {
     const button = page.ownerDocument.createElement('button');
@@ -117,6 +145,8 @@ export function bindFactoryPage(root, ctx) {
   const listeners = new AbortController();
   const eventOptions = { signal: listeners.signal };
   const visitor = !ctx.state().profile;
+  const practiced = new Set();
+  const benchButtons = new Map();
   let points = new Map(zones.map(point => [point.id, point]));
   let scene;
   let selected = 'entrance';
@@ -128,6 +158,12 @@ export function bindFactoryPage(root, ctx) {
   let movePointer = null;
   let lookPointer = null;
   let lookPosition;
+  let walkPoint = null;
+  let nearbyBench = null;
+  let benchSession = null;
+  let unmountGame;
+  let catalog = 'zones';
+  let catalogTouched = false;
   let disposed = false;
 
   function announce(text) {
@@ -140,13 +176,101 @@ export function bindFactoryPage(root, ctx) {
     selected = id;
     activeName.textContent = point.label;
     blurb.textContent = point.blurb;
-    location.textContent = point.label;
+    if (!benchSession) location.textContent = point.label;
     for (const button of pointButtons) button.setAttribute('aria-pressed', String(button.dataset.factoryPoint === id));
     training.hidden = !point.route;
     if (point.route) {
       const needsRole = visitor && point.route !== 'hall';
       training.setAttribute('href', '#' + (needsRole ? 'create' : point.route));
       training.textContent = needsRole ? '建角后开始训练' : (routeLabels[point.route] ?? '打开关联页面');
+    }
+  }
+
+  function showCatalog(name) {
+    catalog = name;
+    benchList.hidden = name !== 'benches';
+    zoneCatalog.hidden = name !== 'zones';
+    for (const button of catalogButtons) button.setAttribute('aria-pressed', String(button.dataset.factoryCatalog === name));
+  }
+
+  function markPracticed(id) {
+    practiced.add(id);
+    const button = benchButtons.get(id);
+    if (!button) return;
+    button.lastElementChild.textContent = '已练习';
+    button.dataset.practiced = 'true';
+  }
+
+  function showWorkbenches(benches) {
+    benchButtons.clear();
+    benchList.replaceChildren();
+    benches.forEach((bench, index) => {
+      const button = doc.createElement('button');
+      const number = doc.createElement('span');
+      const label = doc.createElement('span');
+      const status = doc.createElement('span');
+      button.type = 'button';
+      button.className = 'factory-point factory-bench-entry';
+      button.dataset.factoryBench = bench.id;
+      number.className = 'factory-bench-number';
+      number.textContent = String(index + 1).padStart(2, '0');
+      number.setAttribute('aria-hidden', 'true');
+      label.textContent = bench.label;
+      status.className = 'factory-bench-status';
+      button.append(number, label, status);
+      benchList.append(button);
+      benchButtons.set(bench.id, button);
+      if (practiced.has(bench.id)) markPracticed(bench.id);
+    });
+    catalogSwitch.hidden = benches.length === 0;
+    showCatalog(benches.length ? (catalogTouched ? catalog : 'benches') : 'zones');
+  }
+
+  function syncControls() {
+    const working = Boolean(benchSession);
+    const canInteract = ready && !working && !transitioning && mode === 'walk';
+    for (const button of modeButtons) button.disabled = !ready || working;
+    reset.hidden = !ready || working;
+    interact.hidden = !canInteract || !(nearbyBench || walkPoint?.route);
+    interact.textContent = nearbyBench ? '操作工作台' : '互动';
+    interact.setAttribute('aria-label', nearbyBench ? `操作${nearbyBench.label}` : '互动');
+    benchHint.hidden = !canInteract || !nearbyBench;
+    benchHint.textContent = nearbyBench?.label ?? '';
+    showFullscreen();
+  }
+
+  function showBench(bench, phase) {
+    unmountGame?.();
+    unmountGame = undefined;
+    benchSession = phase === 'closed' ? null : bench;
+    directory.hidden = Boolean(benchSession);
+    benchPanel.hidden = !benchSession;
+    if (!benchSession) {
+      delete sceneLayout.dataset.benchPhase;
+      delete stage.dataset.benchPhase;
+      location.textContent = walkPoint?.label ?? '车间通道';
+      syncControls();
+      if (stage.getBoundingClientRect().top < 0) stage.scrollIntoView({ block: 'start' });
+      canvas.focus({ preventScroll: true });
+      return;
+    }
+    sceneLayout.dataset.benchPhase = phase;
+    stage.dataset.benchPhase = phase;
+    benchTitle.textContent = bench.label;
+    location.textContent = '工作台视角';
+    syncControls();
+    benchMessage.textContent = phase === 'focusing' ? '正在对准台面…' : phase === 'leaving' ? '正在返回通道…' : '';
+    if (phase === 'focusing') {
+      focusAfterMode = false;
+      stopMoving();
+      stopLooking();
+      announce('');
+      if (doc.fullscreenElement === stage) void doc.exitFullscreen().catch(() => {});
+      if (stage.getBoundingClientRect().top < 0) stage.scrollIntoView({ block: 'start' });
+    }
+    if (phase === 'ready') {
+      unmountGame = mountFactoryWorkbench(benchGame, { id: bench.id, onComplete: () => markPracticed(bench.id) });
+      benchTitle.focus({ preventScroll: true });
     }
   }
 
@@ -166,17 +290,19 @@ export function bindFactoryPage(root, ctx) {
   }
 
   function showMode(next, changing = false) {
-    if (next !== mode) location.textContent = next === 'walk' ? '车间通道' : '厂区总览';
+    if (next !== mode) {
+      walkPoint = null;
+      if (!benchSession) location.textContent = next === 'walk' ? '车间通道' : '厂区总览';
+    }
     mode = next;
     transitioning = changing;
     stage.dataset.mode = next;
     page.dataset.factoryView = next;
     stage.dataset.transitioning = String(changing);
     for (const button of modeButtons) {
-      button.disabled = !ready;
       button.setAttribute('aria-pressed', String(button.dataset.factoryMode === next));
     }
-    interact.hidden = !ready || changing || next !== 'walk';
+    syncControls();
     if (changing || next !== 'walk') {
       stopMoving();
       stopLooking();
@@ -190,7 +316,7 @@ export function bindFactoryPage(root, ctx) {
   function showFullscreen() {
     const expanded = doc.fullscreenElement === stage;
     const label = expanded ? '退出全屏' : '全屏';
-    fullscreen.hidden = !ready || !doc.fullscreenEnabled || !stage.requestFullscreen;
+    fullscreen.hidden = !ready || Boolean(benchSession) || !doc.fullscreenEnabled || !stage.requestFullscreen;
     fullscreen.setAttribute('aria-label', label);
     fullscreen.setAttribute('aria-pressed', String(expanded));
     fullscreen.title = label;
@@ -213,8 +339,6 @@ export function bindFactoryPage(root, ctx) {
     loading.hidden = state !== 'loading';
     failure.hidden = state !== 'failed';
     controls.hidden = !ready;
-    reset.hidden = !ready;
-    showFullscreen();
     canvas.tabIndex = ready ? 0 : -1;
     if (ready) canvas.removeAttribute('aria-hidden');
     else canvas.setAttribute('aria-hidden', 'true');
@@ -252,6 +376,7 @@ export function bindFactoryPage(root, ctx) {
           for (const button of pointButtons) {
             button.firstElementChild.textContent = points.get(button.dataset.factoryPoint).label;
           }
+          showWorkbenches(layout?.benches ?? []);
           showPoint(selected);
         },
         onMode(next, changing) {
@@ -259,11 +384,21 @@ export function bindFactoryPage(root, ctx) {
         },
         onZone(point) {
           if (!active()) return;
+          if (mode === 'walk') walkPoint = point;
           if (point?.id) showPoint(point.id);
-          else if (mode === 'walk') location.textContent = '车间通道';
+          else if (mode === 'walk' && !benchSession) location.textContent = '车间通道';
+          syncControls();
+        },
+        onBenchNearby(bench) {
+          if (!active()) return;
+          nearbyBench = bench;
+          syncControls();
+        },
+        onBench(bench, phase) {
+          if (active()) showBench(bench, phase);
         },
         onStatus(text) {
-          if (active()) announce(text ?? '');
+          if (active() && !benchSession) announce(text ?? '');
         },
         onInteract(point) {
           if (!active() || !point) return;
@@ -297,25 +432,36 @@ export function bindFactoryPage(root, ctx) {
     scene.moveTouch(x / distance, y / distance);
   }
 
-  const canWalk = () => ready && scene && mode === 'walk' && !transitioning;
+  const canWalk = () => ready && scene && mode === 'walk' && !transitioning && !benchSession;
   page.addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button) return;
+    if (button.dataset.factoryCatalog) {
+      catalogTouched = true;
+      showCatalog(button.dataset.factoryCatalog);
+      return;
+    }
+    if (button.dataset.factoryBench && ready && !benchSession) {
+      scene.focusBench(button.dataset.factoryBench);
+      return;
+    }
     if (button.dataset.factoryPoint) {
+      catalogTouched = true;
       showPoint(button.dataset.factoryPoint);
       if (ready) scene.jumpTo(button.dataset.factoryPoint);
       return;
     }
     const next = button.dataset.factoryMode;
-    if (next && ready && next !== mode) {
+    if (next && ready && !benchSession && next !== mode) {
       focusAfterMode = true;
       scene.setMode(next);
       return;
     }
     const action = button.dataset.factoryAction;
     if (action === 'retry') loadScene();
-    if (action === 'fullscreen' && ready) void toggleFullscreen();
-    if (action === 'reset' && ready) {
+    if (action === 'leave-bench' && benchSession) scene.exitBench();
+    if (action === 'fullscreen' && ready && !benchSession) void toggleFullscreen();
+    if (action === 'reset' && ready && !benchSession) {
       scene.reset();
       showPoint('entrance');
     }
@@ -364,6 +510,7 @@ export function bindFactoryPage(root, ctx) {
     disposed = true;
     stopMoving();
     stopLooking();
+    unmountGame?.();
     listeners.abort();
     if (doc.fullscreenElement === stage) void doc.exitFullscreen().catch(() => {});
     scene?.destroy();

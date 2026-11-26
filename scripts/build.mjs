@@ -9,6 +9,7 @@ const entries = [
   'index.html', 'app.js', 'state.js', 'config.js', 'cloud.js', 'styles.css',
   'training.js', 'training.css', 'community.js', 'community.css', 'community-play.css', 'online-play.css',
   'factory-page.js', 'factory-page.css', 'factory-view.js', 'factory-motion.js', 'factory-activity.js', 'assets/factory-layout.json',
+  'factory-workbenches.js', 'factory-workbenches.css',
   ...safe.filter(name => name.endsWith('.webp') || name === 'icon.png').map(name => 'assets/' + name),
 ];
 const mime = {

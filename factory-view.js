@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from './vendor/three/addons/loaders/GLTFLoader.js';
 import { createFactoryActivity } from './factory-activity.js';
 import {
-  EYE_HEIGHT, clamp, dampOverview, movementVector, movePlayer, nearestStandable,
-  overviewDistance, sampleCameraTransition, shiftOverview, wrapAngle,
+  BENCH_RANGE, EYE_HEIGHT, benchCameraPose, clamp, dampOverview, movementVector, movePlayer,
+  nearbyBench, nearestStandable, overviewDistance, sampleCameraTransition, shiftOverview,
+  spreadBadgePositions, walkLineIsClear, wrapAngle,
 } from './factory-motion.js';
 
 const WALK_FOV = 66;
@@ -23,8 +24,11 @@ function validateLayout(layout) {
   const rectangle = box => box && [box.minX, box.maxX, box.minZ, box.maxZ].every(Number.isFinite) &&
     box.minX < box.maxX && box.minZ < box.maxZ;
   const coordinate = point => point && Number.isFinite(point.x) && Number.isFinite(point.z);
+  const bench = item => coordinate(item) && typeof item.id === 'string' && typeof item.label === 'string' &&
+    typeof item.zone === 'string' && coordinate(item.target) && Number.isFinite(item.target.y);
   if (!rectangle(layout?.bounds) || !coordinate(layout.spawn) ||
       !Array.isArray(layout.obstacles) || !layout.obstacles.every(rectangle) ||
+      (layout.benches !== undefined && (!Array.isArray(layout.benches) || !layout.benches.every(bench))) ||
       !Array.isArray(layout.points) || !layout.points.every(point => coordinate(point) &&
         typeof point.id === 'string' && (point.path === undefined ||
           (Array.isArray(point.path) && point.path.every(coordinate))))) {
@@ -70,7 +74,7 @@ function disposeScene(root) {
   const materials = new Set();
   const textures = new Set();
   root.traverse(object => {
-    if (object.geometry) geometries.add(object.geometry);
+    if (object.geometry && !object.isSprite) geometries.add(object.geometry);
     if (object.shadow) object.shadow.dispose();
     if (object.material) {
       for (const material of [].concat(object.material)) {
@@ -204,6 +208,106 @@ function createWayfinding(layout, scene) {
   };
 }
 
+function benchBadgeTexture(doc, number) {
+  const image = doc.createElement('canvas');
+  image.width = image.height = 128;
+  const draw = image.getContext('2d');
+  if (!draw) return null;
+  draw.beginPath();
+  draw.moveTo(28, 16);
+  draw.lineTo(100, 16);
+  draw.lineTo(113, 29);
+  draw.lineTo(113, 86);
+  draw.lineTo(100, 99);
+  draw.lineTo(74, 99);
+  draw.lineTo(64, 111);
+  draw.lineTo(54, 99);
+  draw.lineTo(28, 99);
+  draw.lineTo(15, 86);
+  draw.lineTo(15, 29);
+  draw.closePath();
+  draw.lineJoin = 'round';
+  draw.strokeStyle = '#101a18';
+  draw.lineWidth = 11;
+  draw.stroke();
+  draw.fillStyle = '#162321';
+  draw.fill();
+  draw.strokeStyle = '#cedbd6';
+  draw.lineWidth = 4;
+  draw.stroke();
+  draw.fillStyle = '#f6fff9';
+  draw.font = '700 53px system-ui, sans-serif';
+  draw.textAlign = 'center';
+  draw.textBaseline = 'middle';
+  draw.fillText(String(number).padStart(2, '0'), 64, 60);
+  const texture = new THREE.CanvasTexture(image);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+function createBenchMarkers(scene, benches, doc) {
+  const group = new THREE.Group();
+  group.name = 'workbench-markers';
+  const ringGeometry = benches.length ? new THREE.RingGeometry(0.28, 0.325, 24) : null;
+  const benchMarkers = benches.map((bench, index) => {
+    const material = new THREE.SpriteMaterial({
+      map: benchBadgeTexture(doc, index + 1), color: 0xb3dfce, sizeAttenuation: false,
+      transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+    });
+    const badge = new THREE.Sprite(material);
+    badge.name = `workbench-marker-${bench.id}`;
+    badge.userData.bench = bench;
+    const anchor = new THREE.Vector3(bench.target.x, bench.target.y + 0.68, bench.target.z);
+    badge.position.copy(anchor);
+    badge.renderOrder = 7;
+    const ring = new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({
+      color: 0x8dd8bd, transparent: true, opacity: 0.76, depthWrite: false,
+    }));
+    ring.position.set(bench.x, 0.044, bench.z);
+    ring.rotation.x = -Math.PI / 2;
+    group.add(badge, ring);
+    return { bench, badge, ring, anchor, projected: new THREE.Vector3() };
+  });
+  scene.add(group);
+
+  return {
+    badges: benchMarkers.map(marker => marker.badge),
+    update({ mode, player, nearest, hidden, camera, height }) {
+      const width = height * camera.aspect;
+      const viewSize = 2 * Math.tan(camera.fov * Math.PI / 360) / height;
+      const size = mode === 'overview' ? clamp(width * 0.091, 30, 43) : 43;
+      const overheadBadges = [];
+      if (mode === 'overview' && !hidden) camera.updateMatrixWorld();
+      for (const { bench, badge, ring, anchor, projected } of benchMarkers) {
+        const distance = Math.hypot(player.x - bench.x, player.z - bench.z);
+        const active = nearest?.id === bench.id;
+        badge.visible = !hidden && (mode === 'overview' || distance < 8.0);
+        ring.visible = !hidden && (mode === 'overview' || distance < 9.0);
+        badge.material.color.setHex(active ? 0xffca78 : 0xb3dfce);
+        badge.scale.setScalar(viewSize * (active ? 54 : size));
+        badge.position.copy(anchor);
+        ring.material.color.setHex(active ? 0xffc775 : 0x8dd8bd);
+        ring.scale.setScalar(active ? 1.23 : 1);
+        if (mode !== 'overview' || hidden) continue;
+        projected.copy(anchor).project(camera);
+        if (projected.z > -1 && projected.z < 1 && Math.abs(projected.x) < 1.08 && Math.abs(projected.y) < 1.08) {
+          overheadBadges.push({ badge, projected });
+        }
+      }
+      const anchors = overheadBadges.map(({ projected }) => ({
+        x: (projected.x + 1) * width / 2, y: (1 - projected.y) * height / 2,
+      }));
+      const separated = spreadBadgePositions(anchors, size * 0.88 + 3, size * 0.64);
+      overheadBadges.forEach(({ badge, projected }, index) => {
+        const { x, y } = separated[index];
+        if (x !== anchors[index].x || y !== anchors[index].y) {
+          badge.position.set(x / width * 2 - 1, 1 - y / height * 2, projected.z).unproject(camera);
+        }
+      });
+    },
+  };
+}
+
 function addInteriorEnvelope(scene, { bounds, spawn }) {
   const shell = new THREE.Group();
   const make = (color, emission = 0) => new THREE.MeshStandardMaterial({
@@ -262,6 +366,7 @@ export function createFactoryScene(canvas, options = {}) {
   const {
     assetUrl = name => `./assets/${name}`,
     onProgress, onReady, onMode, onZone, onStatus, onInteract,
+    onBenchNearby, onBench,
   } = options;
   const doc = canvas.ownerDocument;
   const win = doc.defaultView;
@@ -271,10 +376,17 @@ export function createFactoryScene(canvas, options = {}) {
   const keys = new Set();
   const tabIndex = canvas.getAttribute('tabindex');
   const savedTouchAction = canvas.style.touchAction;
+  const savedCursor = canvas.style.cursor;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(OVERVIEW_FOV, 1, 0.045, 280);
   const lookTarget = new THREE.Vector3();
+  const badgeRay = new THREE.Raycaster();
+  const badgePointer = new THREE.Vector2();
+  const badgeScreen = new THREE.Vector3();
   let renderer, resizeObserver, layout, player, hero, heroShadow, updateWayfinding, revealInterior, activity;
+  let benchMarkers, benchSession;
+  let closestBench = null;
+  let badgePress = null;
   let visibilityObserver;
   let canvasVisible = true;
   let overviewView, overviewTarget;
@@ -341,6 +453,49 @@ export function createFactoryScene(canvas, options = {}) {
     return nearest;
   }
 
+  function updateBenchMarkers() {
+    benchMarkers?.update({ mode, player, nearest: closestBench, hidden: Boolean(benchSession),
+      camera, height: viewportHeight });
+  }
+
+  function setNearbyBench(bench) {
+    if (closestBench?.id === bench?.id) return;
+    closestBench = bench;
+    updateBenchMarkers();
+    dirty = true;
+    onBenchNearby?.(bench);
+  }
+
+  function syncNearbyBench() {
+    setNearbyBench(mode === 'walk' && !transition && !benchSession ? nearbyBench(player, layout) : null);
+  }
+
+  function benchUnderPointer(clientX, clientY) {
+    if (!benchMarkers?.badges.length || benchSession || transition || locked) return null;
+    const { left, top, width, height } = canvas.getBoundingClientRect();
+    if (!width || !height) return null;
+    badgePointer.set((clientX - left) / width * 2 - 1, 1 - (clientY - top) / height * 2);
+    if (Math.abs(badgePointer.x) > 1 || Math.abs(badgePointer.y) > 1) return null;
+    camera.updateMatrixWorld();
+    badgeRay.setFromCamera(badgePointer, camera);
+    const visibleBadges = benchMarkers.badges.filter(badge => badge.visible);
+    for (const badge of visibleBadges) badge.updateWorldMatrix(true, false);
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const hit of badgeRay.intersectObjects(visibleBadges, false)) {
+      const bench = hit.object.userData.bench;
+      if (mode === 'walk' && (Math.hypot(bench.x - player.x, bench.z - player.z) >= BENCH_RANGE ||
+          !walkLineIsClear(player, bench, layout))) continue;
+      badgeScreen.setFromMatrixPosition(hit.object.matrixWorld).project(camera);
+      const distance = Math.hypot((badgeScreen.x - badgePointer.x) * width, (badgeScreen.y - badgePointer.y) * height);
+      if (distance < nearestDistance) {
+        nearest = bench;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
+  }
+
   function placeHero() {
     hero.position.set(player.x, 0, player.z);
     hero.rotation.y = heroYaw;
@@ -361,37 +516,49 @@ export function createFactoryScene(canvas, options = {}) {
     hero.visible = pose.y > 2.21 || Math.hypot(pose.x - player.x, pose.z - player.z) > 0.72;
     heroShadow.visible = hero.visible;
     revealInterior(pose.y);
+    updateBenchMarkers();
     dirty = true;
   }
 
   function finishTransition() {
+    const onFinish = transition?.onFinish;
     transition = null;
     onMode?.(mode, false);
-    setZone(mode === 'overview' ? previewPoint : nearestZone());
+    if (destroyed || transition) return;
+    onFinish?.();
+    if (destroyed || transition) return;
+    if (!benchSession) setZone(mode === 'overview' ? previewPoint : nearestZone());
+    syncNearbyBench();
+    updateBenchMarkers();
   }
 
-  function flyTo(getTarget, milliseconds, lift, travelInset = 0) {
-    const target = getTarget();
-    if (reducedMotion?.matches) {
-      applyPose(target);
-      finishTransition();
-      return;
-    }
-    transition = { start: win.performance.now(), from: currentPose, getTarget, milliseconds, lift, travelInset };
+  function flyTo(getTarget, milliseconds, lift, travelInset = 0, { onStart, onFinish } = {}) {
+    const next = { start: win.performance.now(), from: currentPose, getTarget, milliseconds, lift, travelInset, onFinish };
+    transition = next;
+    canvas.style.cursor = savedCursor;
+    setNearbyBench(null);
     onMode?.(mode, true);
+    if (destroyed || transition !== next) return;
+    onStart?.();
+    if (destroyed || transition !== next) return;
+    if (reducedMotion?.matches) {
+      applyPose(getTarget());
+      finishTransition();
+    }
   }
 
-  function flyToWalkingPoint(distance) {
+  function flyToWalkingPoint(distance, target = walkPose, events, clearance = distance > 2) {
     // Rise above nearby benches before the horizontal leg of a longer reposition.
-    const clearance = distance > 2;
     const lift = clearance ? clamp(distance * 0.23, 3.7, 6.3) : Math.min(1, distance * 0.35);
-    flyTo(walkPose, clamp(640 + distance * 25, 680, 1500), lift, clearance ? 0.24 : 0);
+    flyTo(target, clamp(640 + distance * 25, 680, 1500), lift, clearance ? 0.24 : 0, events);
   }
 
   function clearInput() {
     keys.clear();
     touchX = 0;
     touchY = 0;
+    badgePress = null;
+    canvas.style.cursor = savedCursor;
     endDrag();
   }
 
@@ -402,7 +569,7 @@ export function createFactoryScene(canvas, options = {}) {
   }
 
   function setMode(next) {
-    if (destroyed || (next !== 'overview' && next !== 'walk') || next === mode) return false;
+    if (destroyed || benchSession || (next !== 'overview' && next !== 'walk') || next === mode) return false;
     mode = next;
     if (!layout) return true;
     clearInput();
@@ -419,7 +586,7 @@ export function createFactoryScene(canvas, options = {}) {
   }
 
   function jumpTo(id) {
-    if (!layout || destroyed) return false;
+    if (!layout || destroyed || benchSession) return false;
     const point = layout.points.find(candidate => candidate.id === id);
     if (!point) return false;
 
@@ -445,7 +612,7 @@ export function createFactoryScene(canvas, options = {}) {
   }
 
   function reset() {
-    if (!layout || destroyed) return false;
+    if (!layout || destroyed || benchSession) return false;
     player = { ...nearestStandable(layout.spawn, layout), yaw: layoutHeading(layout.spawn.yaw) };
     previewPoint = null;
     centerOverview();
@@ -461,13 +628,13 @@ export function createFactoryScene(canvas, options = {}) {
   }
 
   function moveTouch(x, y) {
-    if (destroyed) return;
+    if (destroyed || benchSession) return;
     touchX = Number.isFinite(x) ? clamp(x, -1, 1) : 0;
     touchY = Number.isFinite(y) ? clamp(y, -1, 1) : 0;
   }
 
   function lookTouch(dx, dy) {
-    if (!layout || destroyed || transition || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    if (!layout || destroyed || transition || benchSession || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
     if (mode === 'overview') {
       const metersPerPixel = 2 * overviewRadius() * Math.tan(OVERVIEW_FOV * Math.PI / 360) / viewportHeight;
       panOverview(-dx * metersPerPixel, dy * metersPerPixel * Math.SQRT2);
@@ -479,10 +646,67 @@ export function createFactoryScene(canvas, options = {}) {
   }
 
   function interact() {
-    if (!layout || destroyed || transition) return false;
+    if (!layout || destroyed || transition || benchSession) return false;
+    const bench = mode === 'walk' && nearbyBench(player, layout);
+    if (bench) return focusBench(bench.id);
     const point = mode === 'walk' ? nearestZone() : previewPoint;
     if (!point) return false;
     onInteract?.(point);
+    return true;
+  }
+
+  function focusBench(id) {
+    if (!layout || destroyed || benchSession) return false;
+    const bench = (layout.benches || []).find(candidate => candidate.id === id);
+    if (!bench) return false;
+    const pose = benchCameraPose(bench, layout);
+    if (!pose) return false;
+
+    const landing = { x: pose.x, z: pose.z, yaw: pose.yaw };
+    const fromNearby = mode === 'walk' && !transition && Math.hypot(bench.x - player.x, bench.z - player.z) < BENCH_RANGE &&
+      walkLineIsClear(player, bench, layout);
+    const resume = fromNearby ? { player, pitch, heroYaw } : { player: landing, pitch: -0.1, heroYaw: pose.yaw };
+    const distance = Math.hypot(pose.x - currentPose.x, pose.z - currentPose.z);
+    const clearance = distance > 2 || !walkLineIsClear(currentPose, pose, layout);
+    benchSession = { bench, resume, phase: 'focusing' };
+    mode = 'walk';
+    player = { ...landing };
+    pitch = pose.pitch;
+    heroYaw = pose.yaw;
+    clearInput();
+    if (doc.pointerLockElement === canvas) doc.exitPointerLock?.();
+    onStatus?.('');
+    setZone(null);
+    placeHero();
+    updateBenchMarkers();
+    flyToWalkingPoint(distance, () => pose, {
+      onStart: () => onBench?.(bench, 'focusing'),
+      onFinish: () => {
+        benchSession.phase = 'ready';
+        onBench?.(bench, 'ready');
+      },
+    }, clearance);
+    return true;
+  }
+
+  function exitBench() {
+    if (!benchSession || destroyed || benchSession.phase === 'leaving') return false;
+    const { bench, resume } = benchSession;
+    benchSession.phase = 'leaving';
+    player = resume.player;
+    pitch = resume.pitch;
+    heroYaw = resume.heroYaw;
+    clearInput();
+    placeHero();
+    const distance = Math.hypot(player.x - currentPose.x, player.z - currentPose.z);
+    const clearance = distance > 2 || !walkLineIsClear(currentPose, player, layout);
+    flyToWalkingPoint(distance, walkPose, {
+      onStart: () => onBench?.(bench, 'leaving'),
+      onFinish: () => {
+        benchSession = null;
+        onBench?.(bench, 'closed');
+      },
+    }, clearance);
     return true;
   }
 
@@ -505,6 +729,7 @@ export function createFactoryScene(canvas, options = {}) {
     placeHero();
     applyPose(walkPose());
     setZone(nearestZone());
+    syncNearbyBench();
   }
 
   function panOverview(right, forward) {
@@ -533,6 +758,7 @@ export function createFactoryScene(canvas, options = {}) {
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
     if (layout && mode === 'overview' && !transition && currentPose) applyPose(overviewPose());
+    else updateBenchMarkers();
     dirty = true;
   }
 
@@ -546,7 +772,7 @@ export function createFactoryScene(canvas, options = {}) {
       applyPose(sampleCameraTransition(from, getTarget(), progress, lift, travelInset));
       if (progress >= 1) finishTransition();
     } else if (mode === 'walk') {
-      updatePlayer(delta);
+      if (!benchSession) updatePlayer(delta);
     } else {
       updateOverview(delta);
     }
@@ -563,8 +789,18 @@ export function createFactoryScene(canvas, options = {}) {
   }
 
   function onKeyDown(event) {
-    if (!layout || (doc.activeElement !== canvas && doc.pointerLockElement !== canvas) || event.defaultPrevented ||
-        event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (!layout || event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+    if (benchSession && (event.code === 'Escape' || event.key === 'Escape') && !doc.fullscreenElement &&
+        !event.target?.isContentEditable && !event.target?.closest?.('input, textarea, select')) {
+      event.preventDefault();
+      if (!event.repeat) exitBench();
+      return;
+    }
+    if (doc.activeElement !== canvas && doc.pointerLockElement !== canvas) return;
+    if (benchSession) {
+      if (WALK_KEYS.has(event.code) || event.code === 'KeyV' || event.code === 'KeyE') event.preventDefault();
+      return;
+    }
     if (event.code === 'KeyV' || event.code === 'KeyE') {
       event.preventDefault();
       if (!event.repeat) {
@@ -581,14 +817,19 @@ export function createFactoryScene(canvas, options = {}) {
     if (!lockPending || destroyed) return;
     lockPending = false;
     lockFailed = true;
-    if (mode === 'walk') onStatus?.('拖动场景可以转动视角。');
+    if (mode === 'walk' && !benchSession) onStatus?.('拖动场景可以转动视角。');
   }
 
   function pointerDown(event) {
-    if (!layout || (event.button !== 0 && event.button !== 2)) return;
+    if (!layout || benchSession || (event.button !== 0 && event.button !== 2)) return;
+    if (event.button === 0 && !badgePress) {
+      const bench = benchUnderPointer(event.clientX, event.clientY);
+      if (bench) badgePress = { id: event.pointerId, x: event.clientX, y: event.clientY, bench };
+    }
     if (mode === 'walk' && (event.pointerType !== 'mouse' || event.button !== 0)) return;
     canvas.focus({ preventScroll: true });
     if (transition || locked || drag) return;
+    if (mode === 'walk' && badgePress) return;
     if (mode === 'overview' && event.pointerType !== 'touch' && event.button !== 2) return;
     event.preventDefault();
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
@@ -608,7 +849,7 @@ export function createFactoryScene(canvas, options = {}) {
     const hadLock = locked;
     locked = doc.pointerLockElement === canvas;
     if (locked || hadLock) lockPending = false;
-    if (locked && mode !== 'walk') {
+    if (locked && (mode !== 'walk' || benchSession)) {
       doc.exitPointerLock?.();
       return;
     }
@@ -617,7 +858,7 @@ export function createFactoryScene(canvas, options = {}) {
       onStatus?.('鼠标控制视角，按 Esc 释放。');
     } else if (hadLock) {
       clearInput();
-      if (mode === 'walk') onStatus?.('点击场景继续走动。');
+      if (mode === 'walk' && !benchSession) onStatus?.('点击场景继续走动。');
     }
   }
 
@@ -645,13 +886,26 @@ export function createFactoryScene(canvas, options = {}) {
       overviewTarget = { ...overviewTarget, zoom };
     }, { passive: false });
     listen(canvas, 'pointermove', event => {
-      if (drag?.id !== event.pointerId || locked) return;
-      lookTouch(event.clientX - drag.x, event.clientY - drag.y);
-      drag.x = event.clientX;
-      drag.y = event.clientY;
+      if (drag?.id === event.pointerId && !locked) {
+        lookTouch(event.clientX - drag.x, event.clientY - drag.y);
+        drag.x = event.clientX;
+        drag.y = event.clientY;
+      } else if (event.pointerType === 'mouse') {
+        canvas.style.cursor = benchUnderPointer(event.clientX, event.clientY) ? 'pointer' : savedCursor;
+      }
+    });
+    listen(canvas, 'pointerleave', () => {
+      canvas.style.cursor = savedCursor;
+      if (!drag) badgePress = null;
     });
     for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-      listen(canvas, event, pointer => { if (drag?.id === pointer.pointerId) endDrag(); });
+      listen(canvas, event, pointer => {
+        const press = badgePress?.id === pointer.pointerId ? badgePress : null;
+        if (press) badgePress = null;
+        if (drag?.id === pointer.pointerId) endDrag();
+        if (event === 'pointerup' && press && Math.hypot(pointer.clientX - press.x, pointer.clientY - press.y) <= 9 &&
+            benchUnderPointer(pointer.clientX, pointer.clientY)?.id === press.bench.id) focusBench(press.bench.id);
+      });
     }
     listen(doc, 'mousemove', event => { if (locked) lookTouch(event.movementX, event.movementY); });
     listen(doc, 'pointerlockchange', pointerLockChanged);
@@ -748,6 +1002,7 @@ export function createFactoryScene(canvas, options = {}) {
     heroShadow = addHeroShadow(scene);
     scene.add(factory, hero);
     updateWayfinding = createWayfinding(layout, scene);
+    benchMarkers = createBenchMarkers(scene, layout.benches || [], doc);
     activity = createFactoryActivity(scene, layout, { reducedMotion: reducedMotion?.matches });
     placeHero();
     applyPose(mode === 'overview' ? overviewPose() : walkPose());
@@ -770,5 +1025,5 @@ export function createFactoryScene(canvas, options = {}) {
   });
   ready.catch(() => {});
 
-  return { ready, setMode, toggleMode, jumpTo, reset, moveTouch, lookTouch, interact, destroy };
+  return { ready, setMode, toggleMode, jumpTo, reset, moveTouch, lookTouch, interact, focusBench, exitBench, destroy };
 }

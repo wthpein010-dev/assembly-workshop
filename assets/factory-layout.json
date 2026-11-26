@@ -342,6 +342,12 @@
       "maxZ": -11.635
     },
     {
+      "minX": -13.97,
+      "maxX": -11.73,
+      "minZ": -4.005,
+      "maxZ": -3.095
+    },
+    {
       "minX": -6.145,
       "maxX": -5.615,
       "minZ": 4.805,
@@ -997,6 +1003,92 @@
         }
       ],
       "route": "missions"
+    }
+  ],
+  "benches": [
+    {
+      "id": "materials",
+      "label": "仓储扫码备料",
+      "zone": "warehouse",
+      "x": -13.1,
+      "z": -2.5,
+      "target": {
+        "x": -13.1,
+        "y": 1.045,
+        "z": -3.53
+      }
+    },
+    {
+      "id": "assembly",
+      "label": "主板装配",
+      "zone": "assembly",
+      "x": -2.83,
+      "z": 5.73,
+      "target": {
+        "x": -2.8,
+        "y": 0.995,
+        "z": 4.34
+      }
+    },
+    {
+      "id": "wiring",
+      "label": "机箱接线",
+      "zone": "assembly",
+      "x": 0.56,
+      "z": 5.73,
+      "target": {
+        "x": 0.66,
+        "y": 1.065,
+        "z": 4.39
+      }
+    },
+    {
+      "id": "inspection",
+      "label": "通电质检",
+      "zone": "inspection",
+      "x": 13.57,
+      "z": -0.27,
+      "target": {
+        "x": 13.598,
+        "y": 1.1,
+        "z": -1.526
+      }
+    },
+    {
+      "id": "repair",
+      "label": "故障诊断",
+      "zone": "repair",
+      "x": 13.28,
+      "z": 6.29,
+      "target": {
+        "x": 13.54,
+        "y": 1.1,
+        "z": 4.781
+      }
+    },
+    {
+      "id": "packing",
+      "label": "封箱出货",
+      "zone": "packing",
+      "x": 12.47,
+      "z": -3.72,
+      "target": {
+        "x": 12.47,
+        "y": 1.1,
+        "z": -4.64
+      }
+    },
+    {
+      "id": "calibration",
+      "label": "机械臂校准",
+      "zone": "automation",
+      "x": 24.17,
+      "z": 5.79,
+      "target": {
+        "x": 24.17,
+        "y": 1.05,
+        "z": 4.26
+      }
     }
   ]
 }
