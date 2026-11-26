@@ -259,7 +259,7 @@ function adjustForm(stage, run, disabled) {
   const pos = (point) => `--fwb-x:${(point.x + 3.5) * 100 / 7}%;--fwb-y:${(3.5 - point.y) * 100 / 7}%`;
   const sides = [['x', -1, '向左', '←'], ['y', 1, '向上', '↑'], ['y', -1, '向下', '↓'], ['x', 1, '向右', '→']];
   return `<div class="fwb-adjust">
-    <div class="fwb-grid" data-fwb-adjust tabindex="${disabled ? -1 : 0}"
+    <div class="fwb-grid" data-fwb-adjust role="group" tabindex="${disabled ? -1 : 0}"
       aria-label="校准平面。当前位置 ${axes(run.position)}。目标 ${axes(run.goal)}。方向键微调">
       <span class="fwb-goal" style="${pos(run.goal)}" aria-hidden="true"></span>
       <span class="fwb-position" style="${pos(run.position)}" aria-hidden="true"></span>
