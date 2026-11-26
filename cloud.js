@@ -3,7 +3,7 @@ import { SOCIAL_GIFTS } from './social-gifts.js';
 
 const metaKey = 'assembly-workshop.cloud.v1';
 const local = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(location.href);
-const apiOrigin = local ? location.origin : CLOUD_ORIGIN;
+export const apiOrigin = local ? location.origin : CLOUD_ORIGIN;
 const endpoint = path => apiOrigin + '/api/' + path;
 
 async function request(path, code, method = 'GET', body) {

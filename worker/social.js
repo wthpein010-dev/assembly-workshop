@@ -1,4 +1,5 @@
 import { SOCIAL_GIFTS } from '../social-gifts.js';
+import { normalizeAvatar } from '../avatar-catalog.js';
 
 const feedLimit = 60;
 const playerLimit = 60;
@@ -17,7 +18,8 @@ function query(db, sql, ...params) {
   return db.prepare(sql).bind(...params);
 }
 
-function avatarSql(alias) {
+export function publicProfileSql(alias) {
+  const avatar = '$.profile.avatar';
   const numeric = (key, last) => `CASE
     WHEN json_type(${alias}.state, '$.profile.${key}') = 'integer'
       AND json_extract(${alias}.state, '$.profile.${key}') BETWEEN 0 AND ${last}
@@ -28,30 +30,48 @@ function avatarSql(alias) {
     'face', ${numeric('face', 3)},
     'hair', ${numeric('hair', 2)},
     'tone', ${numeric('tone', 2)},
-    'group', ${numeric('group', 2)}
+    'group', ${numeric('group', 2)},
+    'avatar', json(CASE json_extract(${alias}.state, '${avatar}.kind')
+      WHEN 'preset' THEN CASE
+        WHEN json_type(${alias}.state, '${avatar}.id') = 'text'
+          AND length(json_extract(${alias}.state, '${avatar}.id')) <= 64
+        THEN json_object('kind', 'preset', 'id', json_extract(${alias}.state, '${avatar}.id')) END
+      WHEN 'photo' THEN CASE
+        WHEN length(json_extract(${alias}.state, '${avatar}.version')) = 32
+        THEN json_object('kind', 'remote', 'id', ${alias}.id, 'version', json_extract(${alias}.state, '${avatar}.version')) END
+    END)
   )`;
 }
 
-function player(row) {
-  return { id: row.id, name: row.name, profile: JSON.parse(row.profile) };
+export function playerWithProfile(row) {
+  const profile = JSON.parse(row.profile);
+  const avatar = profile.avatar;
+  if (avatar?.kind === 'preset') {
+    const normalized = normalizeAvatar(avatar);
+    if (normalized) profile.avatar = normalized;
+    else delete profile.avatar;
+  } else if (avatar?.kind !== 'remote' || !/^[a-f0-9]{32}$/.test(avatar.version)) {
+    delete profile.avatar;
+  }
+  return { id: row.id, name: row.name, profile };
 }
 
 function event(row) {
   const base = {
     id: row.id, type: row.type, at: row.at,
-    from: player({ id: row.from_id, name: row.from_name, profile: row.from_profile }),
+    from: playerWithProfile({ id: row.from_id, name: row.from_name, profile: row.from_profile }),
   };
   if (row.type === 'message') return { ...base, text: row.text };
   return {
-    ...base, to: player({ id: row.to_id, name: row.to_name, profile: row.to_profile }),
+    ...base, to: playerWithProfile({ id: row.to_id, name: row.to_name, profile: row.to_profile }),
     giftId: row.gift_id, featured: row.featured === 1,
   };
 }
 
 const eventColumns = `
   e.id, e.type, e.at, e.from_id, e.to_id, e.text, e.gift_id, e.featured,
-  sender.name AS from_name, ${avatarSql('sender')} AS from_profile,
-  receiver.name AS to_name, ${avatarSql('receiver')} AS to_profile
+  sender.name AS from_name, ${publicProfileSql('sender')} AS from_profile,
+  receiver.name AS to_name, ${publicProfileSql('receiver')} AS to_profile
 `;
 const eventTables = `workshop_social_events e
   JOIN workshop_accounts sender ON sender.id = e.from_id
@@ -68,7 +88,7 @@ async function ranking(db, mode) {
   const amount = mode === 'featured' ? 'count(*)' : 'sum(gift_cost)';
   const premium = mode === 'featured' ? 'AND featured = 1' : '';
   const { results } = await query(db, `
-    SELECT a.id, a.name, ${avatarSql('a')} AS profile, totals.score
+    SELECT a.id, a.name, ${publicProfileSql('a')} AS profile, totals.score
     FROM (
       SELECT ${idColumn} AS player_id, ${amount} AS score
       FROM workshop_social_events WHERE type = 'gift' ${premium}
@@ -77,20 +97,20 @@ async function ranking(db, mode) {
     JOIN workshop_accounts a ON a.id = totals.player_id
     ORDER BY totals.score DESC, a.id ASC LIMIT ?
   `, rankingLimit).all();
-  return results.map((row) => ({ ...player(row), score: row.score }));
+  return results.map((row) => ({ ...playerWithProfile(row), score: row.score }));
 }
 
 async function findPlayer(db, id) {
   const row = await query(db, `
-    SELECT a.id, a.name, ${avatarSql('a')} AS profile FROM workshop_accounts a WHERE a.id = ?
+    SELECT a.id, a.name, ${publicProfileSql('a')} AS profile FROM workshop_accounts a WHERE a.id = ?
   `, id).first();
-  return row ? player(row) : null;
+  return row ? playerWithProfile(row) : null;
 }
 
 async function activePlayers(db, ownId) {
   const now = Date.now();
   const { results } = await query(db, `
-    SELECT a.id, a.name, ${avatarSql('a')} AS profile
+    SELECT a.id, a.name, ${publicProfileSql('a')} AS profile
     FROM workshop_accounts a
     LEFT JOIN (
       SELECT to_id, max(at) AS recent_gift FROM workshop_social_events
@@ -99,7 +119,7 @@ async function activePlayers(db, ownId) {
     WHERE a.id <> ? AND (a.last_seen > ? OR g.recent_gift IS NOT NULL)
     ORDER BY (a.last_seen > ?) DESC, max(a.last_seen, coalesce(g.recent_gift, 0)) DESC, a.id LIMIT ?
   `, now - recentFor, ownId, now - activeFor, now - activeFor, playerLimit).all();
-  return results.map(player);
+  return results.map(playerWithProfile);
 }
 
 export async function readSocial(db, accountId = null) {

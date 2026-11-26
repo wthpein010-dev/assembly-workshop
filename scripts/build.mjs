@@ -13,6 +13,7 @@ const entries = [
   'factory-recovery.js', 'factory-recovery-view.js', 'factory-recovery-ui.js', 'factory-recovery.css',
   'shop-page.js', 'shop-catalog.js', 'shop.css',
   'california-ui.css',
+  'avatar-catalog.js', 'avatar-photo.js', 'avatar-studio.js', 'avatar-studio.css',
   'social-gifts.js', 'social-client.js', 'social-page.js', 'social-page.css', 'factory-social.js', 'factory-social.css',
   ...safe.filter(name => name.endsWith('.webp') || name === 'icon.png').map(name => 'assets/' + name),
 ];
@@ -36,6 +37,7 @@ await Promise.all([
   copyFile(join(project, 'worker', 'index.js'), join(dist, 'worker', 'index.js')),
   copyFile(join(project, 'worker', 'social.js'), join(dist, 'worker', 'social.js')),
   copyFile(join(project, 'social-gifts.js'), join(dist, 'social-gifts.js')),
+  copyFile(join(project, 'avatar-catalog.js'), join(dist, 'avatar-catalog.js')),
   rm(join(dist, 'api.js'), { force: true }),
 ]);
 await writeFile(join(dist, 'index.js'), [

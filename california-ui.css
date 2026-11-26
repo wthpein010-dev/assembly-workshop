@@ -199,7 +199,21 @@ progress::-webkit-progress-bar { background: var(--line); }
   background-image: url("./assets/avatars.webp?v=ca1");
   border-color: #91a6b6;
 }
+.portrait-preset {
+  background-image: url("./assets/avatar-studio-atlas.webp");
+  background-size: 400% 400%;
+}
+.portrait-photo { filter: none; }
+.portrait-photo > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .portrait.large { box-shadow: 0 12px 26px #1524383d; }
+.portrait.large:is(.portrait-preset, .portrait-photo) { aspect-ratio: 1; }
+.avatar-layout { align-items: start; }
+.avatar-heading { margin-bottom: var(--layout-gap); }
+.live-person { display: flex; align-items: center; gap: .45rem; min-width: 0; overflow-wrap: anywhere; }
+.live-person > .portrait { width: 1.75rem; height: 1.75rem; }
+@media (min-width: 56rem) {
+  .avatar-layout .preview-portrait { position: sticky; top: var(--page-top); }
+}
 .form-panel { background: var(--panel); }
 .form-panel h2 { color: var(--steel); }
 .choice { color: var(--paper); background: var(--panel); border-color: var(--steel-rule); }

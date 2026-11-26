@@ -1,4 +1,5 @@
 import { normalizeRecovery } from './factory-recovery.js';
+import { normalizeAvatar } from './avatar-catalog.js';
 
 export const SAVE_KEY = 'assembly-workshop.progress.v1';
 export const WORK_GROUPS = ['装配一组', '质检二组', '设备支持组'];
@@ -21,6 +22,7 @@ export function validName(name) {
 export function profileFrom(fields) {
   const index = (value, choices) =>
     Number.isInteger(value) && value >= 0 && value < choices.length ? value : 0;
+  const avatar = normalizeAvatar(fields.avatar);
   return {
     name: validName(fields.name) ? fields.name.trim() : '新人工友',
     gender: fields.gender === 'male' ? 'male' : 'female',
@@ -28,6 +30,7 @@ export function profileFrom(fields) {
     hair: index(fields.hair, HAIR_LABELS),
     tone: index(fields.tone, TONES),
     group: index(fields.group, WORK_GROUPS),
+    ...(avatar ? { avatar } : {}),
   };
 }
 

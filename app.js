@@ -1,17 +1,19 @@
-import { escapeHtml as esc, loadSave, persistSave, normalizeSave, initialState, profileFrom, validName, levelAt, FACE_LABELS, HAIR_LABELS, TONES, WORK_GROUPS } from './state.js';
-import { makeCloud } from './cloud.js?v=social1';
+import { escapeHtml as esc, loadSave, persistSave, normalizeSave, initialState, profileFrom, validName, levelAt, FACE_LABELS, HAIR_LABELS, TONES, WORK_GROUPS } from './state.js?v=avatar1';
+import { apiOrigin, makeCloud } from './cloud.js?v=avatar1';
 import { trainingPage, bindTraining } from './training.js';
 import { communityPage, bindCommunity } from './community.js?v=social1';
 import { factoryPage, bindFactoryPage } from './factory-page.js?v=social1';
 import { shopPage, bindShop } from './shop-page.js?v=social1';
 import { makeSocial } from './social-client.js';
 import { socialPage, bindSocialPage } from './social-page.js';
+import { normalizeAvatar, PRESET_AVATARS } from './avatar-catalog.js';
+import { avatarStudioMarkup, bindAvatarStudio } from './avatar-studio.js';
 
 const app = document.querySelector('#app');
 const notice = document.querySelector('#notice');
 const trainingViews = new Set(['missions', 'station', 'record']);
 const communityViews = new Set(['friends', 'team', 'help', 'honor', 'event']);
-const viewNames = { hall: '任务大厅', world: '工坊地图', missions: '任务手册', station: '模拟工位', record: '技能记录', social: '社交广场', friends: '工友名录', team: '组队训练', help: '求助板', shop: '积分兑换店', honor: '我的工位', event: '工坊建设周', online: '联机大厅', account: '角色与存档', create: '创建角色', start: '装配工坊' };
+const viewNames = { hall: '任务大厅', world: '工坊地图', missions: '任务手册', station: '模拟工位', record: '技能记录', social: '社交广场', friends: '工友名录', team: '组队训练', help: '求助板', shop: '积分兑换店', honor: '我的工位', event: '工坊建设周', online: '联机大厅', account: '角色与存档', create: '创建角色', avatar: '修改头像', start: '装配工坊' };
 const cloudStatus = { local: '本地存档', connecting: '连接中', ready: '云档已同步', saving: '正在同步', conflict: '待处理云档', offline: '云档暂未连接' };
 const roles = [ '身份绑定', '定制角色', '角色取名' ];
 const coopSteps = [
@@ -25,6 +27,7 @@ let disposePage;
 let toastTimer;
 let step = 0;
 let draft = profileFrom({ name: '' });
+let avatarDraft;
 let worldTimer;
 let world = null;
 let worldError = '';
@@ -88,6 +91,7 @@ function changeRoute() {
   const requested = location.hash.slice(1);
   const route = Object.hasOwn(viewNames, requested) ? requested : state.profile ? 'hall' : 'start';
   view = state.profile || ['start', 'create', 'account', 'world', 'shop', 'social'].includes(route) ? route : 'start';
+  if (view === 'avatar') avatarDraft = profileFrom(state.profile);
   clearInterval(worldTimer);
 
   render();
@@ -104,16 +108,27 @@ function button(label, route, type = 'secondary') {
   return `<a class="btn btn-${type}" href="#${route}">${label}</a>`;
 }
 
-function faceStyle(profile) {
-  const p = profileFrom(profile);
+function faceStyle(p) {
   const column = (p.face + p.hair) % FACE_LABELS.length;
   const row = p.gender === 'male' ? 100 : 0;
   const temperature = ['none', 'sepia(.16) saturate(1.15)', 'brightness(.84) saturate(.92)'][p.tone];
   return '--portrait-x:' + (column * 100 / 3) + '%;--portrait-y:' + row + '%;--portrait-tone:' + temperature;
 }
 
-function portrait(profile, size = '') {
-  return `<span aria-hidden="true" class="portrait ${size}" style="${faceStyle(profile)}"></span>`;
+function portrait(profile = {}, size = '') {
+  const p = profileFrom(profile);
+  const avatar = p.avatar;
+  if (avatar?.kind === 'preset') {
+    const { row, column } = PRESET_AVATARS[avatar.id];
+    return `<span aria-hidden="true" class="portrait portrait-preset ${size}" style="--portrait-x:${column * 100 / 3}%;--portrait-y:${row * 100 / 3}%"></span>`;
+  }
+  const remote = profile.avatar;
+  const remoteUrl = remote?.kind === 'remote'
+    && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(remote.id)
+    && /^[a-f0-9]{32}$/.test(remote.version)
+    ? apiOrigin + '/api/avatars/' + remote.id + '?v=' + remote.version : '';
+  const source = avatar?.kind === 'photo' ? avatar.data : remoteUrl;
+  return `<span aria-hidden="true" class="portrait ${source ? 'portrait-photo' : ''} ${size}" style="${faceStyle(p)}">${source ? `<img src="${esc(source)}" alt="" width="144" height="144" decoding="async">` : ''}</span>`;
 }
 
 function navItem(route, label, related = []) {
@@ -178,14 +193,15 @@ function creatorPage() {
      <div class="choice-block"><h3>角色性别</h3><div class="choices">${options('gender', [['female', '女性'], ['male', '男性']])}</div></div>
      <div class="choice-block"><h3>脸型预设</h3><div class="choices">${options('face', FACE_LABELS.map((n, i) => [i, n]))}</div></div>
      <div class="choice-block"><h3>发型</h3><div class="choices">${options('hair', HAIR_LABELS.map((n, i) => [i, n]))}</div></div>
-     <div class="choice-block"><h3>肤色</h3><div class="choices">${options('tone', TONES.map((n, i) => [i, n]))}</div></div>`,
+     <div class="choice-block"><h3>肤色</h3><div class="choices">${options('tone', TONES.map((n, i) => [i, n]))}</div></div>
+     ${step === 1 ? avatarStudioMarkup(ctx, { profile: draft }) : ''}`,
     `<h2>给角色取个名字</h2><p>工友会在大厅与聊天中看到这个名字。</p>
      <label for="nick">角色昵称</label><input id="nick" name="nickname" type="text" autocomplete="off" spellcheck="false" maxlength="28" value="${draft.name === '新人工友' ? '' : esc(draft.name)}" placeholder="例如 Alex-Lin" aria-describedby="name-hint">
      <p id="name-hint" class="field-hint" aria-live="polite">可用汉字、字母、数字，长度 2–14 字。</p>`,
   ];
   return `<section class="container creator">
      <ol class="creator-steps" aria-label="建角进度">${roles.map((title, n) => `<li ${step === n ? 'aria-current="step"' : ''}><b>${n + 1}</b>${title}</li>`).join('')}</ol>
-     <div class="creator-grid">
+     <div class="creator-grid${step === 1 ? ' avatar-layout' : ''}">
        <div class="preview-portrait" aria-label="角色预览">${portrait(draft, 'large')}<div><span>${WORK_GROUPS[draft.group]}</span><b>${step === 2 && validName(draft.name) ? esc(draft.name) : '见习装配员'}</b></div></div>
        <form id="create-form" class="form-panel" novalidate>
          ${fields[step]}
@@ -257,7 +273,7 @@ function accountPage() {
     <div class="section-heading"><div><span class="eyeline">工坊门禁</span><h1>角色与存档</h1></div>${button('返回', profile ? 'hall' : 'start')}</div>
     <div class="account-grid">
       <div class="form-panel account-profile">
-        ${profile ? `${portrait(profile, 'portrait-medium')}<h2>${esc(profile.name)}</h2><p>${WORK_GROUPS[profile.group]} · 等级 ${levelAt(state.xp).level}</p>${command('修改角色', 'edit-avatar')}` : `<h2>创建体验角色</h2><p>用虚拟角色体验工坊的公开演示，现场考核和薪资连接均为示例。</p>${button('开始建角', 'create', 'primary')}`}
+        ${profile ? `${portrait(profile, 'portrait-medium')}<h2>${esc(profile.name)}</h2><p>${WORK_GROUPS[profile.group]} · 等级 ${levelAt(state.xp).level}</p><div class="btn-row">${button('修改头像', 'avatar', 'primary')}${command('修改角色', 'edit-avatar', 'text')}</div>` : `<h2>创建体验角色</h2><p>用虚拟角色体验工坊的公开演示，现场考核和薪资连接均为示例。</p>${button('开始建角', 'create', 'primary')}`}
       </div>
       <div class="form-panel account-storage">
         <div class="section-heading"><h2>云存档与联机</h2><span class="status-chip" data-cloud-status>${cloudStatus[cloud.status()]}</span></div>
@@ -272,6 +288,19 @@ function accountPage() {
           <p id="account-error" class="field-hint" aria-live="polite"></p>
           <button class="btn btn-secondary" type="submit">读取我的云档</button>
          </form>`}
+      </div>
+    </div>
+  </section>`;
+}
+
+function editAvatarPage() {
+  return `<section class="container creator">
+    <div class="section-heading avatar-heading"><h1>修改头像</h1></div>
+    <div class="creator-grid avatar-layout">
+      <div class="preview-portrait" aria-label="角色头像预览">${portrait(avatarDraft, 'large')}<div><span>${WORK_GROUPS[avatarDraft.group]}</span><b>${esc(avatarDraft.name)}</b></div></div>
+      <div class="form-panel avatar-form">
+        ${avatarStudioMarkup(ctx, { profile: avatarDraft, editing: true })}
+        <div class="btn-row">${button('取消', 'account')}${command('保存头像', 'save-avatar', 'primary')}</div>
       </div>
     </div>
   </section>`;
@@ -354,7 +383,7 @@ function drawWorld() {
     ${room.step < 3 ? liveBench(room) : ''}
     <div class="btn-row">${room.step >= 3 ? actionButton('领取协作奖励', 'reward', room.id, true) : ''}
     ${actionButton('离开工位', 'leave')}</div>`
-    : `<h2>在线工友</h2>${people.length ? people.map(p => `<div class="person-row"><b>${esc(p.name)}</b>${actionButton('邀请质检', 'invite', p.id)}</div>`).join('') : '<p>其他玩家上线后会出现在这里。</p>'}`;
+    : `<h2>在线工友</h2>${people.length ? people.map(p => `<div class="person-row"><span class="live-person">${p.profile ? portrait(p.profile) : ''}<b>${esc(p.name)}</b></span>${actionButton('邀请质检', 'invite', p.id)}</div>`).join('') : '<p>其他玩家上线后会出现在这里。</p>'}`;
   if (!panel.contains(document.activeElement) || !worldRequest) {
     const focus = document.activeElement?.dataset.world;
     const target = document.activeElement?.dataset.target;
@@ -373,7 +402,7 @@ function drawWorld() {
     }
   }
   const messages = world.messages || [];
-  const chat = messages.length ? messages.map(m => `<div class="live-message"><strong>${esc(m.author)}</strong><span>${esc(m.text)}</span></div>`).join('') : '<p>频道还没有消息。打个招呼吧。</p>';
+  const chat = messages.length ? messages.map(m => `<div class="live-message"><span class="live-person">${m.profile ? portrait(m.profile) : ''}<strong>${esc(m.author)}</strong></span><span>${esc(m.text)}</span></div>`).join('') : '<p>频道还没有消息。打个招呼吧。</p>';
   if (feed.innerHTML !== chat) { feed.innerHTML = chat; feed.scrollTop = feed.scrollHeight; }
 }
 
@@ -406,7 +435,7 @@ function render() {
     : view === 'world' ? factoryPage(ctx)
     : view === 'social' ? socialPage(ctx)
     : view === 'shop' ? shopPage(ctx)
-    : ({ start: startPage, create: creatorPage, hall: hallPage, account: accountPage, online: onlinePage }[view])();
+    : ({ start: startPage, create: creatorPage, avatar: editAvatarPage, hall: hallPage, account: accountPage, online: onlinePage }[view])();
   app.innerHTML = shell(typeof page === 'string' ? page : '', guest);
   const panel = document.querySelector('#main');
   if (typeof page !== 'string' && page) panel.append(page);
@@ -415,7 +444,22 @@ function render() {
   if (view === 'shop') bindShop(panel, ctx);
   if (view === 'world') disposePage = bindFactoryPage(panel, ctx);
   if (view === 'social') disposePage = bindSocialPage(panel, ctx);
+  if ((view === 'create' && step === 1) || view === 'avatar') {
+    const profile = view === 'avatar' ? avatarDraft : draft;
+    disposePage = bindAvatarStudio(panel, {
+      profile, portrait, escape: esc,
+      onSelect(avatar) {
+        profile.avatar = avatar;
+        updateCreatorPortrait(profile);
+      },
+    });
+  }
   if (view === 'online' && cloud.meta()) drawWorld();
+}
+
+function updateCreatorPortrait(profile) {
+  const preview = app.querySelector('.preview-portrait > .portrait');
+  if (preview) preview.outerHTML = portrait(profile, 'large');
 }
 
 function setProfile(profile) {
@@ -454,8 +498,15 @@ app.addEventListener('click', async event => {
   if (choice) {
     const key = choice.dataset.choice;
     draft[key] = key === 'gender' ? choice.dataset.value : Number(choice.dataset.value);
-    render();
-    app.querySelector('[data-choice="' + key + '"][data-value="' + choice.dataset.value + '"]')?.focus();
+    for (const option of app.querySelectorAll('[data-choice="' + key + '"]')) {
+      const selected = option === choice;
+      option.classList.toggle('selected', selected);
+      option.setAttribute('aria-pressed', String(selected));
+    }
+    const group = app.querySelector('.preview-portrait > div span');
+    if (group) group.textContent = WORK_GROUPS[draft.group];
+    updateCreatorPortrait(draft);
+    app.querySelector('[data-avatar-studio]')?.dispatchEvent(new CustomEvent('avatar-profile-change', { detail: draft }));
     return;
   }
   if (event.target.closest('[data-live-piece]')) {
@@ -491,6 +542,12 @@ app.addEventListener('click', async event => {
   if (action === 'back-create') { step = Math.max(0, step - 1); render(); }
   if (action === 'reset-avatar') { draft = profileFrom({ name: draft.name, group: draft.group }); render(); }
   if (action === 'edit-avatar') { draft = { ...state.profile }; step = 1; go('create'); }
+  if (action === 'save-avatar' && view === 'avatar' && state.profile) {
+    const selected = normalizeAvatar(avatarDraft.avatar);
+    commit(save => { save.profile = profileFrom({ ...save.profile, avatar: selected }); }, { renderPage: false });
+    toast('头像已更新。');
+    go('account');
+  }
   if (action === 'cloud-create') await cloudButton(button);
   if (action === 'copy-code') {
     try { await usefulClipboard(cloud.meta().code); toast('游玩码已复制。'); }

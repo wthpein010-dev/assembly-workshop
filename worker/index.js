@@ -1,4 +1,5 @@
-import { readSocial, sendSocial } from './social.js';
+import { publicProfileSql, playerWithProfile, readSocial, sendSocial } from './social.js';
+import { normalizeAvatar } from '../avatar-catalog.js';
 
 const pagesOrigin = 'https://wthpein010-dev.github.io';
 const maxStateSize = 100 * 1024;
@@ -10,6 +11,8 @@ const presenceInterval = 40_000;
 const presenceDuration = 5 * 60_000;
 const inviteDuration = 10 * 60_000;
 const encoder = new TextEncoder();
+const avatarPath = /^\/api\/avatars\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i;
+const avatarVersionPattern = /^[a-f0-9]{32}$/;
 
 class ApiError extends Error {
   constructor(status, message) {
@@ -62,11 +65,22 @@ function cleanText(value) {
     .trim();
 }
 
-function validatedState(state) {
+async function validatedState(state) {
   assertApi(state && typeof state === 'object' && !Array.isArray(state), 400, '请输入有效存档');
   const name = cleanText(state.profile?.name);
   assertApi(/^[\p{L}\p{N}·_-]{2,14}$/u.test(name), 400, '请输入 2 至 14 个字的工位昵称');
   state.profile.name = name;
+  if (Object.hasOwn(state.profile, 'avatar')) {
+    const original = state.profile.avatar;
+    const avatar = normalizeAvatar(original);
+    assertApi(original === null || avatar, 400, '头像格式无效，请重新生成或选择');
+    if (avatar?.kind === 'photo') {
+      const digest = await crypto.subtle.digest('SHA-256', encoder.encode(avatar.data));
+      state.profile.avatar = { ...avatar, version: toHex(new Uint8Array(digest, 0, 16)) };
+    } else {
+      state.profile.avatar = avatar ?? null;
+    }
+  }
   const serialized = JSON.stringify(state);
   assertApi(encoder.encode(serialized).length <= maxStateSize, 413, '存档大小超过 100 KB');
   return { name, serialized };
@@ -90,7 +104,7 @@ function query(db, sql, ...values) {
 
 async function createAccount(db, request, headers) {
   const { state } = await readBody(request, maxStateSize + 1024);
-  const { name, serialized } = validatedState(state);
+  const { name, serialized } = await validatedState(state);
   const id = crypto.randomUUID();
   const code = toHex(crypto.getRandomValues(new Uint8Array(24)));
   const result = await query(db, `
@@ -115,7 +129,7 @@ async function signedInAccount(db, request, includeState = false) {
 async function writeSave(db, request, account, headers) {
   const { rev, state } = await readBody(request, maxStateSize + 1024);
   assertApi(Number.isSafeInteger(rev) && rev > 0, 400, '存档版本无效');
-  const { name, serialized } = validatedState(state);
+  const { name, serialized } = await validatedState(state);
   const result = await query(db, `
     UPDATE workshop_accounts
     SET name = ?, state = ?, rev = rev + 1, last_seen = ?
@@ -124,6 +138,33 @@ async function writeSave(db, request, account, headers) {
   if (result.meta.changes === 1) return json({ id: account.id, rev: rev + 1, state }, headers);
   const latest = await query(db, 'SELECT id, rev, state FROM workshop_accounts WHERE id = ?', account.id).first();
   return json({ ...savePayload(latest), error: '云存档已更新' }, headers, 409);
+}
+
+async function avatarResponse(db, request, url, id, headers) {
+  const row = await query(db, `
+    SELECT json_extract(state, '$.profile.avatar.data') AS data,
+           json_extract(state, '$.profile.avatar.version') AS version
+    FROM workshop_accounts WHERE id = ? AND json_extract(state, '$.profile.avatar.kind') = 'photo'
+  `, id).first();
+  const version = url.searchParams.get('v');
+  assertApi(row && avatarVersionPattern.test(row.version) && (!version || version === row.version), 404, '头像不存在');
+  const avatar = normalizeAvatar({ kind: 'photo', data: row.data });
+  assertApi(avatar, 404, '头像不存在');
+
+  const etag = '"' + row.version + '"';
+  headers.set('Cache-Control', version ? 'public, max-age=60, must-revalidate' : 'public, max-age=0, must-revalidate');
+  headers.set('ETag', etag);
+  headers.set('X-Content-Type-Options', 'nosniff');
+  const validators = request.headers.get('If-None-Match')?.split(',') ?? [];
+  if (validators.some(value => ['*', etag, 'W/' + etag].includes(value.trim()))) {
+    return new Response(null, { status: 304, headers });
+  }
+  const comma = avatar.data.indexOf(',');
+  const mime = avatar.data.slice(5, avatar.data.indexOf(';'));
+  const bytes = Uint8Array.from(atob(avatar.data.slice(comma + 1)), character => character.charCodeAt(0));
+  headers.set('Content-Type', mime);
+  headers.set('Content-Length', String(bytes.length));
+  return new Response(request.method === 'HEAD' ? null : bytes, { headers });
 }
 
 function currentRoom(world, id) {
@@ -142,16 +183,33 @@ async function readWorld(db) {
 }
 
 async function worldPayload(db, world, account) {
-  const { results: players } = await query(db, `
-    SELECT id, name FROM workshop_accounts WHERE last_seen > ?
-    ORDER BY last_seen DESC, id LIMIT ?
+  const { results: online } = await query(db, `
+    SELECT a.id, a.name, ${publicProfileSql('a')} AS profile
+    FROM workshop_accounts a WHERE a.last_seen > ?
+    ORDER BY a.last_seen DESC, a.id LIMIT ?
   `, Date.now() - presenceDuration, maxPlayers).all();
+  const players = online.map(playerWithProfile);
+  const profiles = new Map(players.map(({ id, profile }) => [id, profile]));
+  const absentAuthors = [...new Set(world.messages
+    .map(({ authorId }) => authorId)
+    .filter(id => typeof id === 'string' && !profiles.has(id)))];
+  if (absentAuthors.length) {
+    const { results } = await query(db, `
+      SELECT a.id, a.name, ${publicProfileSql('a')} AS profile
+      FROM workshop_accounts a WHERE a.id IN (${absentAuthors.map(() => '?').join(', ')})
+    `, ...absentAuthors).all();
+    for (const row of results) profiles.set(row.id, playerWithProfile(row).profile);
+  }
+  const messages = world.messages.map(({ authorId, ...message }) => {
+    const profile = profiles.get(authorId);
+    return profile ? { ...message, profile } : message;
+  });
   const invites = world.invites
     .filter(({ to }) => to === account.id)
     .map(({ id, from, author }) => ({ id, from, author }));
   const shared = currentRoom(world, account.id);
   const room = shared ? { ...shared, actor: shared.step < 3 ? shared.players[shared.step % 2].id : null } : null;
-  return { players, messages: world.messages, invites, room };
+  return { players, messages, invites, room };
 }
 
 async function actInWorld(db, world, account, { action, target, text }) {
@@ -159,7 +217,7 @@ async function actInWorld(db, world, account, { action, target, text }) {
   if (action === 'chat') {
     const message = cleanText(text);
     assertApi(message.length > 0 && [...message].length <= 160, 400, '请输入 1 至 160 个字的消息');
-    world.messages.push({ id: crypto.randomUUID(), author: account.name, text: message });
+    world.messages.push({ id: crypto.randomUUID(), author: account.name, authorId: account.id, text: message });
     world.messages = world.messages.slice(-maxMessages);
     return true;
   }
@@ -260,7 +318,7 @@ async function api(request, env, url) {
   }
   if (origin) headers.set('Access-Control-Allow-Origin', origin);
   if (request.method === 'OPTIONS') {
-    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+    headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, OPTIONS');
     headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
     headers.set('Access-Control-Max-Age', '600');
     return new Response(null, { status: 204, headers });
@@ -285,6 +343,12 @@ async function api(request, env, url) {
       assertApi(['GET', 'POST'].includes(request.method), 405, '请求方式不支持');
       const session = db.withSession?.('first-primary') ?? db;
       return await socialResponse(session, request, headers);
+    }
+    const avatar = avatarPath.exec(url.pathname);
+    if (avatar) {
+      assertApi(['GET', 'HEAD'].includes(request.method), 405, '请求方式不支持');
+      const session = db.withSession?.('first-primary') ?? db;
+      return await avatarResponse(session, request, url, avatar[1].toLowerCase(), headers);
     }
     return json({ error: '接口不存在' }, headers, 404);
   } catch (error) {
