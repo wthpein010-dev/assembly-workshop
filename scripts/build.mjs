@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile, copyFile, rm } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,6 +13,7 @@ const entries = [
   'factory-recovery.js', 'factory-recovery-view.js', 'factory-recovery-ui.js', 'factory-recovery.css',
   'shop-page.js', 'shop-catalog.js', 'shop.css',
   'california-ui.css',
+  'social-gifts.js', 'social-client.js', 'social-page.js', 'social-page.css', 'factory-social.js', 'factory-social.css',
   ...safe.filter(name => name.endsWith('.webp') || name === 'icon.png').map(name => 'assets/' + name),
 ];
 const mime = {
@@ -30,10 +31,15 @@ const external = [
   '/vendor/three/addons/loaders/GLTFLoader.js', '/vendor/three/addons/utils/BufferGeometryUtils.js',
 ];
 await Promise.all(external.map(file => readFile(join(project, file.slice(1)))));
-await mkdir(dist, { recursive: true });
-await copyFile(join(project, 'worker', 'index.js'), join(dist, 'api.js'));
+await mkdir(join(dist, 'worker'), { recursive: true });
+await Promise.all([
+  copyFile(join(project, 'worker', 'index.js'), join(dist, 'worker', 'index.js')),
+  copyFile(join(project, 'worker', 'social.js'), join(dist, 'worker', 'social.js')),
+  copyFile(join(project, 'social-gifts.js'), join(dist, 'social-gifts.js')),
+  rm(join(dist, 'api.js'), { force: true }),
+]);
 await writeFile(join(dist, 'index.js'), [
-  "import api from './api.js';",
+  "import api from './worker/index.js';",
   'const assets = ' + JSON.stringify(staticFiles) + ';',
   'const external = new Set(' + JSON.stringify(external) + ');',
   "export default { async fetch(request, env) {",

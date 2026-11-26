@@ -1,4 +1,5 @@
 import { CLOUD_ORIGIN } from './config.js';
+import { SOCIAL_GIFTS } from './social-gifts.js';
 
 const metaKey = 'assembly-workshop.cloud.v1';
 const local = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(location.href);
@@ -31,11 +32,12 @@ function cachedMeta() {
   } catch { return null; }
 }
 
-export function makeCloud({ current, restore, signal }) {
+export function makeCloud({ current, restore, applyGiftBalance, signal }) {
   let meta = cachedMeta();
   let status = meta ? 'connecting' : 'local';
   let timer;
-  let flushing = false;
+  let flushing;
+  let trading = false;
   let conflict = null;
 
   function emit(next) { status = next; signal(next); }
@@ -51,11 +53,11 @@ export function makeCloud({ current, restore, signal }) {
     conflict = null;
   }
   async function resume() {
-    if (!meta) return;
-    const code = meta.code;
+    if (!meta || trading) return;
+    const { code, rev } = meta;
     try {
       const remote = await request('save', code);
-      if (meta?.code !== code) return;
+      if (meta?.code !== code || meta.rev !== rev || trading) return;
       if (meta.dirty && meta.rev !== remote.rev) {
         conflict = remote;
         emit('conflict');
@@ -67,7 +69,7 @@ export function makeCloud({ current, restore, signal }) {
         emit('ready');
       }
     } catch (error) {
-      if (meta?.code !== code) return;
+      if (meta?.code !== code || meta.rev !== rev || trading) return;
       if (error.status === 401) {
         store(null); emit('local');
       } else emit('offline');
@@ -100,15 +102,19 @@ export function makeCloud({ current, restore, signal }) {
   function queue() {
     if (!meta) return;
     store({ ...meta, dirty: true });
-    if (conflict) return;
+    if (conflict || trading) return;
     clearTimeout(timer);
     timer = setTimeout(flush, 320);
   }
-  async function flush() {
-    if (!meta || !meta.dirty || flushing || conflict) return;
+  function flush() {
+    if (flushing) return flushing;
+    if (!meta?.dirty || conflict || trading) return Promise.resolve();
+    flushing = flushSave().finally(() => { flushing = undefined; });
+    return flushing;
+  }
+  async function flushSave() {
     const { code, rev } = meta;
     const before = JSON.stringify(current());
-    flushing = true;
     emit('saving');
     try {
       const saved = await request('save', code, 'PUT', { rev, state: JSON.parse(before) });
@@ -121,12 +127,62 @@ export function makeCloud({ current, restore, signal }) {
       if (meta?.code !== code) return;
       if (error.status === 409 && error.data.state) { conflict = error.data; emit('conflict'); }
       else emit('offline');
-    } finally { flushing = false; }
+    }
+  }
+  async function socialGift({ target, giftId, requestId }) {
+    const gift = Object.hasOwn(SOCIAL_GIFTS, giftId) ? SOCIAL_GIFTS[giftId] : null;
+    if (!gift) throw new Error('请选择一份礼物。');
+    const code = meta?.code;
+    if (!code) throw new Error('请先连接游玩码。');
+    for (let attempt = 0; meta?.code === code && meta.dirty && !conflict && attempt < 3; attempt++) await flush();
+    if (meta?.code !== code) throw new Error('账号已切换，请重新选择收礼人。');
+    if (conflict || meta.dirty) throw new Error('请先处理或同步角色页的云存档。');
+    const baseline = current().coins;
+    const payload = { action: 'gift', target, giftId, requestId, revision: meta.rev };
+    clearTimeout(timer);
+    trading = true;
+    try {
+      let result;
+      try { result = await request('social', code, 'POST', payload); }
+      catch (error) {
+        if (error.status && error.status < 500) throw error;
+        result = await request('social', code, 'POST', payload);
+      }
+      if (meta?.code !== code) throw new Error('账号已切换，请刷新社交广场。');
+      const saved = result.save;
+      if (saved?.id !== meta.id || !Number.isSafeInteger(saved?.rev) || !Number.isSafeInteger(saved?.state?.coins)) {
+        throw new Error('云存档返回异常，请刷新后重试。');
+      }
+      const changed = meta.dirty;
+      applyGiftBalance(saved.state.coins + current().coins - baseline);
+      attach(code, saved, changed);
+      emit(changed ? 'saving' : 'ready');
+      return result;
+    } catch (error) {
+      const saved = error.data?.save;
+      if (meta?.code === code && error.status === 409 && saved?.id === meta.id) {
+        if (meta.dirty) {
+          conflict = saved;
+          emit('conflict');
+        } else {
+          attach(code, saved);
+          restore(saved.state, { renderPage: false });
+          emit('ready');
+        }
+      }
+      throw error;
+    } finally {
+      trading = false;
+      if (meta?.code === code && meta.dirty && !conflict) timer = setTimeout(flush, 100);
+    }
   }
   return {
     resume, create, signIn, goLocal, useRemote, queue, flush,
     meta: () => meta,
     status: () => status,
     world: (action, data = {}) => request('world', meta?.code, action ? 'POST' : 'GET', action ? { action, ...data } : undefined),
+    social: () => request('social', meta?.code),
+    socialMessage: ({ text, requestId }) => request('social', meta?.code, 'POST', { action: 'message', text, requestId }),
+    socialGift,
   };
 }

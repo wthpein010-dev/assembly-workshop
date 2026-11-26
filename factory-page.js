@@ -1,6 +1,7 @@
 import { mountFactoryWorkbench } from './factory-workbenches.js';
 import { installRecoveryPart, normalizeRecovery, RECOVERY_PARTS, RECOVERY_RECIPES } from './factory-recovery.js';
 import { recoveryAssembly, recoveryCatalog, recoveryEventText, recoveryPhaseLabel, recoveryRecipeFor } from './factory-recovery-ui.js';
+import { factorySocialMarkup, bindFactorySocial } from './factory-social.js';
 
 const zones = [
   { id: 'entrance', label: '车间入口', blurb: '沿车间主通道前进，进入各个作业区。' },
@@ -13,7 +14,7 @@ const zones = [
 ];
 
 const destinations = [
-  ['social', '班组交流'], ['online', '联机大厅'], ['help', '互助任务'], ['event', '工坊建设周'],
+  ['social', '社交广场'], ['online', '联机大厅'], ['help', '互助任务'], ['event', '工坊建设周'],
 ];
 const routeLabels = { hall: '返回大厅', missions: '打开任务手册', station: '前往模拟工位', team: '打开组队训练' };
 
@@ -57,6 +58,7 @@ export function factoryPage(ctx) {
             </div>
             <button type="button" class="btn btn-primary factory-interact" data-factory-action="interact" hidden>互动</button>
             <button type="button" class="btn recovery-pulse" data-recovery-pulse hidden><span>脉冲</span><kbd>F</kbd></button>
+            ${factorySocialMarkup()}
           </div>
           <div class="factory-console" id="factory-controls">
             <p data-factory-controls hidden>
@@ -114,6 +116,7 @@ export function bindFactoryPage(root, ctx) {
   const find = selector => page.querySelector(selector);
   const sceneLayout = find('[data-factory-layout]');
   const stage = find('[data-factory-scene]');
+  const disposeSocial = bindFactorySocial(stage, ctx);
   const canvasSelector = '[data-factory-canvas]';
   let canvas = find(canvasSelector);
   const loading = find('[data-factory-loading]');
@@ -699,6 +702,7 @@ export function bindFactoryPage(root, ctx) {
     stopLooking();
     unmountGame?.();
     dismissRecoveryFeed();
+    disposeSocial?.();
     listeners.abort();
     if (doc.fullscreenElement === stage) void doc.exitFullscreen().catch(() => {});
     scene?.destroy();

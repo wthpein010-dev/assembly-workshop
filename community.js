@@ -41,7 +41,7 @@ const roles = {
 const visibility = { public: '工坊大厅', team: '仅班组', mentor: '仅导师' };
 const stages = { open: '待认领', claimed: '处理中', resolved: '已解决' };
 const routes = {
-  social: ['工友与频道', '加入频道聊天，和演示工友组队。', 'cover'],
+  friends: ['工友名录', '加入频道聊天，和演示工友组队。', 'cover'],
   team: ['班组协作', '传动泵工单 · 完成岗位检查后交给下一班。', 'station'],
   help: ['工坊求助板', '记录异常、认领工单，把处理结果留给下一班。', 'quality-board'],
   shop: ['积分兑换站', '用工坊积分换纪念物，也可以给工友送礼。', 'yard'],
@@ -517,14 +517,14 @@ function eventPage(c) {
       <div class="co-goals">
         <div><span>完成某岗位的首次交接 · +2</span>${link('team', '班组协作')}</div>
         <div><span>记录处理结果并解决工单 · +1</span>${link('help', '工坊求助')}</div>
-        <div><span>首次分享工单 · +1</span>${link('social', '前往频道')}</div>
+      <div><span>首次分享工单 · +1</span>${link('friends', '前往频道')}</div>
       </div>
     </section>
   </div>`;
 }
 
 const pageBodies = {
-  social: (c, _state, e, ctx) => socialPage(c, e, ctx),
+  friends: (c, _state, e, ctx) => socialPage(c, e, ctx),
   team: teamPage,
   help: (c, s, e) => helpPage(c, e),
   honor: honorPage,
@@ -544,7 +544,7 @@ export function communityPage(view, ctx) {
       <div class="co-hero-art" aria-hidden="true" style="--co-art: url('${ctx.escape(ctx.asset(art))}')"></div>
       <div class="co-heading"><h1 id="co-title-page">${title}</h1><p>${description}</p></div>
     </header>`}
-    <nav class="co-nav" aria-label="工坊社区">${Object.entries(routes).map(([id, [label]]) => `<a href="#${id}" data-co-go="${id}"${view === id ? ' aria-current="page"' : ''}>${label}</a>`).join('')}</nav>
+    <nav class="co-nav" aria-label="工坊社区"><a href="#social" data-co-go="social">社交广场</a>${Object.entries(routes).map(([id, [label]]) => `<a href="#${id}" data-co-go="${id}"${view === id ? ' aria-current="page"' : ''}>${label}</a>`).join('')}</nav>
     ${body(c, state, ctx.escape, ctx)}
   </section>`;
 }
@@ -572,7 +572,7 @@ export function bindCommunity(root, view, ctx) {
     const result = updateCommunity(next, action, value);
     if (result.ok || result.changed) {
       ctx.commit((state) => Object.assign(state, next));
-      if ((action === 'invite' && view === 'social') || action === 'challenge-team') ctx.go('team');
+      if ((action === 'invite' && view === 'friends') || action === 'challenge-team') ctx.go('team');
       else {
         const current = root.ownerDocument.querySelector('.community');
         const target = source.id ? root.ownerDocument.getElementById(source.id)

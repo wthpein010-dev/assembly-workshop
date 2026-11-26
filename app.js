@@ -1,15 +1,17 @@
 import { escapeHtml as esc, loadSave, persistSave, normalizeSave, initialState, profileFrom, validName, levelAt, FACE_LABELS, HAIR_LABELS, TONES, WORK_GROUPS } from './state.js';
-import { makeCloud } from './cloud.js';
+import { makeCloud } from './cloud.js?v=social1';
 import { trainingPage, bindTraining } from './training.js';
-import { communityPage, bindCommunity } from './community.js';
-import { factoryPage, bindFactoryPage } from './factory-page.js';
-import { shopPage, bindShop } from './shop-page.js';
+import { communityPage, bindCommunity } from './community.js?v=social1';
+import { factoryPage, bindFactoryPage } from './factory-page.js?v=social1';
+import { shopPage, bindShop } from './shop-page.js?v=social1';
+import { makeSocial } from './social-client.js';
+import { socialPage, bindSocialPage } from './social-page.js';
 
 const app = document.querySelector('#app');
 const notice = document.querySelector('#notice');
 const trainingViews = new Set(['missions', 'station', 'record']);
-const communityViews = new Set(['social', 'team', 'help', 'honor', 'event']);
-const viewNames = { hall: '任务大厅', world: '工坊地图', missions: '任务手册', station: '模拟工位', record: '技能记录', social: '班组交流', team: '组队训练', help: '求助板', shop: '积分兑换店', honor: '我的工位', event: '工坊建设周', online: '联机大厅', account: '角色与存档', create: '创建角色', start: '装配工坊' };
+const communityViews = new Set(['friends', 'team', 'help', 'honor', 'event']);
+const viewNames = { hall: '任务大厅', world: '工坊地图', missions: '任务手册', station: '模拟工位', record: '技能记录', social: '社交广场', friends: '工友名录', team: '组队训练', help: '求助板', shop: '积分兑换店', honor: '我的工位', event: '工坊建设周', online: '联机大厅', account: '角色与存档', create: '创建角色', start: '装配工坊' };
 const cloudStatus = { local: '本地存档', connecting: '连接中', ready: '云档已同步', saving: '正在同步', conflict: '待处理云档', offline: '云档暂未连接' };
 const roles = [ '身份绑定', '定制角色', '角色取名' ];
 const coopSteps = [
@@ -19,7 +21,7 @@ const coopSteps = [
 ];
 let state = loadSave(localStorage);
 let view = '';
-let disposeFactoryPage;
+let disposePage;
 let toastTimer;
 let step = 0;
 let draft = profileFrom({ name: '' });
@@ -33,16 +35,29 @@ let selectedHandoff = '';
 const asset = id => './assets/' + id + '.webp?v=ca1';
 const cloud = makeCloud({
   current: () => state,
-  restore: value => {
+  restore: (value, { renderPage = true } = {}) => {
     state = normalizeSave(value);
     persistSave(localStorage, state);
-    render();
+    if (renderPage) render();
+    else updateWallet();
+  },
+  applyGiftBalance: coins => {
+    state = { ...state, coins };
+    persistSave(localStorage, state);
+    updateWallet();
   },
   signal: status => {
     for (const el of document.querySelectorAll('[data-cloud-status]')) el.textContent = cloudStatus[status];
+    social.identityChanged();
     if (view === 'account' && (status === 'conflict' || status === 'local')) render();
   },
 });
+const social = makeSocial(cloud);
+
+function updateWallet() {
+  const wallet = app.querySelector('[data-wallet-coins]');
+  if (wallet) wallet.textContent = state.coins.toLocaleString('zh-CN');
+}
 
 function toast(message) {
   clearTimeout(toastTimer);
@@ -67,12 +82,12 @@ function go(route) {
   location.hash = route;
 }
 
-const ctx = { state: () => state, commit, go, toast, escape: esc, asset, portrait };
+const ctx = { state: () => state, commit, go, toast, escape: esc, asset, portrait, social };
 
 function changeRoute() {
   const requested = location.hash.slice(1);
   const route = Object.hasOwn(viewNames, requested) ? requested : state.profile ? 'hall' : 'start';
-  view = state.profile || ['start', 'create', 'account', 'world', 'shop'].includes(route) ? route : 'start';
+  view = state.profile || ['start', 'create', 'account', 'world', 'shop', 'social'].includes(route) ? route : 'start';
   clearInterval(worldTimer);
 
   render();
@@ -118,11 +133,11 @@ function shell(contents, guest = false) {
       ${!guest ? `<nav class="primary-nav" aria-label="主要页面">
         ${navItem('hall', '大厅', ['world'])}
         ${navItem('missions', '训练', ['station', 'record'])}
-        ${navItem('social', '工友', ['online', 'team', 'help'])}
+        ${navItem('social', '社交', ['friends', 'online', 'team', 'help'])}
         ${navItem('shop', '商店', ['honor', 'event'])}
       </nav>
       <div class="top-profile">
-        <a href="#shop" class="wallet"><span aria-hidden="true">◆</span> ${state.coins.toLocaleString('zh-CN')} <small>工坊积分</small></a>
+        <a href="#shop" class="wallet"><span aria-hidden="true">◆</span> <span data-wallet-coins>${state.coins.toLocaleString('zh-CN')}</span> <small>工坊积分</small></a>
         <a href="#account" class="identity">${portrait(state.profile)}<span><b>${esc(state.profile.name)}</b><small>Lv. ${points.level}</small></span></a>
       </div>` : `<a class="guest-login" href="#account">已有游玩码</a>`}
     </header>
@@ -140,6 +155,7 @@ function startPage() {
       <div class="btn-row">
         ${button(state.profile ? '继续游戏' : '创建角色', state.profile ? 'hall' : 'create', 'primary')}
         ${!state.profile ? '<button type="button" class="btn btn-secondary" data-action="quick">快速试玩</button>' : button('我的工位', 'honor')}
+        ${button('社交广场', 'social', 'text')}
       </div>
     </div>
     <nav class="start-chapters container" aria-label="工坊入口">
@@ -263,7 +279,7 @@ function accountPage() {
 
 function onlinePage() {
   return `<section class="container online-page">
-    <div class="online-header"><span class="eyeline">工友聚集区</span><h1>联机大厅</h1><p>和其他在线玩家聊天、发出邀请，并完成双人质检。</p><div class="btn-row">${button('和示范工友练习', 'team')}</div></div>
+    <div class="online-header"><span class="eyeline">工友聚集区</span><h1>联机大厅</h1><p>和其他在线玩家聊天、发出邀请，并完成双人质检。</p><div class="btn-row">${button('世界频道', 'social')}${button('和示范工友练习', 'team')}</div></div>
     ${cloud.meta() ? `<div class="online-grid">
       <section class="form-panel live-room" id="live-room" aria-live="polite"></section>
       <section class="form-panel live-chat"><h2>大厅频道</h2><p class="field-hint">公开频道，请勿发布工号或个人资料。</p><div class="chat-feed" id="live-feed" aria-live="polite"></div>
@@ -382,12 +398,13 @@ async function refreshWorld(action, details) {
 
 function render() {
   if (!view) return;
-  disposeFactoryPage?.();
-  disposeFactoryPage = undefined;
+  disposePage?.();
+  disposePage = undefined;
   const guest = !state.profile || view === 'start' || view === 'create';
   const page = trainingViews.has(view) ? trainingPage(view, ctx)
     : communityViews.has(view) ? communityPage(view, ctx)
     : view === 'world' ? factoryPage(ctx)
+    : view === 'social' ? socialPage(ctx)
     : view === 'shop' ? shopPage(ctx)
     : ({ start: startPage, create: creatorPage, hall: hallPage, account: accountPage, online: onlinePage }[view])();
   app.innerHTML = shell(typeof page === 'string' ? page : '', guest);
@@ -396,7 +413,8 @@ function render() {
   if (trainingViews.has(view)) bindTraining(panel, view, ctx);
   if (communityViews.has(view)) bindCommunity(panel, view, ctx);
   if (view === 'shop') bindShop(panel, ctx);
-  if (view === 'world') disposeFactoryPage = bindFactoryPage(panel, ctx);
+  if (view === 'world') disposePage = bindFactoryPage(panel, ctx);
+  if (view === 'social') disposePage = bindSocialPage(panel, ctx);
   if (view === 'online' && cloud.meta()) drawWorld();
 }
 

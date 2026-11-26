@@ -1,13 +1,16 @@
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const project = dirname(dirname(fileURLToPath(import.meta.url)));
 const { default: worker } = await import(pathToFileURL(join(project, 'dist/server/index.js')));
 const sql = new DatabaseSync(':memory:');
-sql.exec(await readFile(join(project, 'drizzle/0000_workshop.sql'), 'utf8'));
+const migrations = join(project, 'drizzle');
+for (const name of (await readdir(migrations)).filter(name => name.endsWith('.sql')).sort()) {
+  sql.exec(await readFile(join(migrations, name), 'utf8'));
+}
 
 function statement(query, params = []) {
   const stmt = sql.prepare(query);

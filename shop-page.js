@@ -93,7 +93,7 @@ function gifting(ctx, data) {
   const products = listShopProducts().filter(item => item.giftable);
   const sent = (data.community.gifts ?? []).filter(gift => SHOP_ITEMS[gift.item]);
   return `<section class="shop-pane">
-    <div class="shop-pane-intro"><div><h2>送给工友</h2><p>兑换一份虚拟礼物，选一句留言送出。</p></div><a class="btn btn-secondary" href="#${data.guest ? 'create' : 'social'}">${data.guest ? '创建角色' : '工友名录'}</a></div>
+    <div class="shop-pane-intro"><div><h2>送给工友</h2><p>兑换一份虚拟礼物，选一句留言送给示范工友。</p></div><div class="btn-row"><a class="btn btn-primary" href="#social">给玩家送礼</a><a class="btn btn-secondary" href="#${data.guest ? 'create' : 'friends'}">${data.guest ? '创建角色' : '工友名录'}</a></div></div>
     <div class="shop-grid shop-gifts-grid">${products.map(item => productCard(item, ctx, data, true)).join('')}</div>
     <h2>送礼记录</h2>
     ${sent.length ? `<ul class="shop-records">${sent.map(gift => {
@@ -162,7 +162,7 @@ function dialogActions(item, ctx, data, step) {
       <button type="button" class="btn btn-primary" data-shop-buy>确认兑换</button><button type="button" class="btn btn-secondary" data-shop-dialog-step="detail">返回详情</button>`;
   if (step === 'gift') {
     const friends = shopFriends(data.community);
-    if (!friends.length) return `<p>添加一位工友后即可送礼。</p><a class="btn btn-primary" href="#social">添加工友</a>`;
+    if (!friends.length) return `<p>添加一位示范工友后即可送礼。</p><a class="btn btn-primary" href="#friends">添加工友</a>`;
     const remaining = data.state.coins - item.price;
     return `<form data-shop-gift-form class="shop-message-options"><label for="shop-gift-friend">送给</label>
       <select name="to" id="shop-gift-friend" required>${friends.map(({ id, name }) => `<option value="${ctx.escape(id)}">${ctx.escape(name)}</option>`).join('')}</select>
@@ -229,6 +229,12 @@ export function bindShop(root, ctx) {
   function transact(action, value, focus) {
     const state = ctx.state();
     if (!state.profile) return;
+    if ((action === 'buy' || action === 'send-gift') && ctx.social?.giftPending()) {
+      const message = '社交送礼正在结算，请稍后再试。';
+      if (dialog.open) dialog.querySelector('[data-shop-error]').textContent = message;
+      else ctx.toast(message);
+      return;
+    }
     const next = { community: structuredClone(state.community), coins: state.coins, xp: state.xp };
     const result = updateCommunity(next, action, value);
     if (!result.ok) {

@@ -1,3 +1,5 @@
+import { readSocial, sendSocial } from './social.js';
+
 const pagesOrigin = 'https://wthpein010-dev.github.io';
 const maxStateSize = 100 * 1024;
 const maxAccounts = 500;
@@ -222,17 +224,32 @@ async function writeWorld(db, account, action) {
   throw new ApiError(409, '大厅有其他更新，请重试');
 }
 
-async function worldResponse(db, request, account, headers) {
+async function touchPresence(db, account) {
   const now = Date.now();
   if (account.last_seen < now - presenceInterval) {
     await query(db, `
       UPDATE workshop_accounts SET last_seen = ? WHERE id = ? AND last_seen < ?
     `, now, account.id, now - presenceInterval).run();
   }
+}
+
+async function worldResponse(db, request, account, headers) {
+  await touchPresence(db, account);
   const world = request.method === 'POST'
     ? await writeWorld(db, account, await readBody(request, 4096))
     : (await readWorld(db)).world;
   return json(await worldPayload(db, world, account), headers);
+}
+
+async function socialResponse(db, request, headers) {
+  const posting = request.method === 'POST';
+  const account = posting || request.headers.has('Authorization') ? await signedInAccount(db, request) : null;
+  if (account) await touchPresence(db, account);
+  if (!posting) return json(await readSocial(db, account?.id), headers);
+  const action = await readBody(request, 4096);
+  if (action.action === 'message') action.text = cleanText(action.text);
+  const { body, status } = await sendSocial(db, account.id, action);
+  return json(body, headers, status);
 }
 
 async function api(request, env, url) {
@@ -263,6 +280,11 @@ async function api(request, env, url) {
     if (url.pathname === '/api/world') {
       assertApi(['GET', 'POST'].includes(request.method), 405, '请求方式不支持');
       return await worldResponse(db, request, await signedInAccount(db, request), headers);
+    }
+    if (url.pathname === '/api/social') {
+      assertApi(['GET', 'POST'].includes(request.method), 405, '请求方式不支持');
+      const session = db.withSession?.('first-primary') ?? db;
+      return await socialResponse(session, request, headers);
     }
     return json({ error: '接口不存在' }, headers, 404);
   } catch (error) {
