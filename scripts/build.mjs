@@ -8,6 +8,7 @@ const safe = await readdir(join(project, 'assets'));
 const entries = [
   'index.html', 'app.js', 'state.js', 'config.js', 'cloud.js', 'styles.css',
   'route-assets.js', 'route-motion.js', 'route-motion.css', 'interaction-effects.css',
+  'pc-game.css', 'character-appearance.js', 'character-creator.css', 'activities.js', 'activities.css',
   'training.js', 'training.css', 'community.js', 'community.css', 'community-play.css', 'online-play.css',
   'factory-page.js', 'factory-page.css', 'factory-view.js', 'factory-assets.js', 'factory-motion.js', 'factory-activity.js', 'assets/factory-layout.json',
   'factory-workbenches.js', 'factory-workbenches.css',
@@ -39,6 +40,7 @@ await Promise.all([
   copyFile(join(project, 'worker', 'social.js'), join(dist, 'worker', 'social.js')),
   copyFile(join(project, 'social-gifts.js'), join(dist, 'social-gifts.js')),
   copyFile(join(project, 'avatar-catalog.js'), join(dist, 'avatar-catalog.js')),
+  copyFile(join(project, 'character-appearance.js'), join(dist, 'character-appearance.js')),
   rm(join(dist, 'api.js'), { force: true }),
 ]);
 await writeFile(join(dist, 'index.js'), [

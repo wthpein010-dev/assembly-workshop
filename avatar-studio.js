@@ -1,5 +1,5 @@
-import { AVATAR_CATEGORIES, PRESET_AVATARS } from './avatar-catalog.js';
-import { decodePhoto, PHOTO_STYLES, renderPhotoAvatar } from './avatar-photo.js';
+import { AVATAR_CATEGORIES, PHOTO_OUTPUT_SIZE, PRESET_AVATARS } from './avatar-catalog.js?v=avatarhd1';
+import { decodePhoto, paintPhotoCrop, PHOTO_STYLES, renderPhotoAvatar } from './avatar-photo.js?v=avatarhd1';
 
 function avatarLabel(avatar) {
   if (avatar?.kind === 'photo') return '照片生成头像';
@@ -47,9 +47,16 @@ export function avatarStudioMarkup(ctx, { profile, editing = false }) {
       </div>
       <p class="avatar-studio-status" data-avatar-status role="status" hidden></p>
       <div class="avatar-photo-workspace" data-avatar-photo-workspace hidden>
-        <div class="avatar-photo-preview">
-          <img data-avatar-photo-preview alt="生成头像预览" width="144" height="144" hidden>
-          <span data-avatar-photo-empty>正在生成预览</span>
+        <div class="avatar-photo-display">
+          <div class="avatar-photo-preview">
+            <img data-avatar-photo-preview alt="生成头像预览" width="${PHOTO_OUTPUT_SIZE}" height="${PHOTO_OUTPUT_SIZE}" hidden>
+            <canvas data-avatar-photo-original role="img" aria-label="原图裁切预览" width="${PHOTO_OUTPUT_SIZE}" height="${PHOTO_OUTPUT_SIZE}" hidden></canvas>
+            <span data-avatar-photo-empty>正在生成预览</span>
+          </div>
+          <div class="avatar-photo-preview-actions">
+            <small>${PHOTO_OUTPUT_SIZE} × ${PHOTO_OUTPUT_SIZE}</small>
+            <button type="button" class="btn btn-text" data-avatar-photo-compare aria-pressed="false">原图对照</button>
+          </div>
         </div>
         <div class="avatar-photo-controls">
           <fieldset class="avatar-photo-styles"><legend>生成风格</legend>
@@ -88,6 +95,8 @@ export function bindAvatarStudio(root, { profile, onSelect, portrait }) {
   const status = find('status');
   const workspace = find('photo-workspace');
   const photoPreview = find('photo-preview');
+  const photoOriginal = find('photo-original');
+  const comparePhoto = find('photo-compare');
   const photoEmpty = find('photo-empty');
   const usePhoto = find('use-photo');
   const useDefault = find('default');
@@ -96,7 +105,9 @@ export function bindAvatarStudio(root, { profile, onSelect, portrait }) {
   let current = profile.avatar ?? null;
   let pending = false;
   let upload = 0;
-  let frame;
+  let previewId = 0;
+  let timer;
+  let showingOriginal = false;
 
   function notify(message = '', error = false) {
     status.textContent = message;
@@ -133,32 +144,45 @@ export function bindAvatarStudio(root, { profile, onSelect, portrait }) {
     onSelect(avatar);
   }
 
-  function renderPreview() {
-    if (!image || pending || signal.aborted) return;
+  function cropSettings() {
+    return Object.fromEntries(ranges.map(input => [input.dataset.avatarCrop, input.valueAsNumber]));
+  }
+
+  function syncComparison(crop = cropSettings()) {
+    photoPreview.hidden = !generated || showingOriginal;
+    photoOriginal.hidden = !showingOriginal;
+    photoEmpty.hidden = Boolean(generated) || showingOriginal;
+    comparePhoto.setAttribute('aria-pressed', String(showingOriginal));
+    if (showingOriginal) paintPhotoCrop(photoOriginal.getContext('2d', { alpha: false }), image, crop);
+  }
+
+  async function renderPreview(request) {
     const style = studio.querySelector('input[name="avatar-photo-style"]:checked').value;
-    const crop = Object.fromEntries(ranges.map(input => [input.dataset.avatarCrop, input.valueAsNumber]));
+    const crop = cropSettings();
     try {
-      generated = renderPhotoAvatar(image, { style, ...crop });
+      const next = await renderPhotoAvatar(image, { style, ...crop });
+      if (request !== previewId || signal.aborted) return;
+      generated = next;
       photoPreview.src = generated;
-      photoPreview.hidden = false;
-      photoEmpty.hidden = true;
       usePhoto.disabled = false;
+      syncComparison(crop);
     } catch (error) {
+      if (request !== previewId || signal.aborted) return;
       generated = undefined;
       photoPreview.removeAttribute('src');
-      photoPreview.hidden = true;
       photoEmpty.textContent = '预览生成失败';
-      photoEmpty.hidden = false;
-      usePhoto.disabled = true;
+      syncComparison(crop);
       notify(error.message || '暂时无法生成头像，请换一张照片。', true);
     }
   }
 
   function queuePreview() {
     if (!image || pending || signal.aborted) return;
+    const request = ++previewId;
     notify();
-    win.cancelAnimationFrame(frame);
-    frame = win.requestAnimationFrame(renderPreview);
+    usePhoto.disabled = true;
+    win.clearTimeout(timer);
+    timer = win.setTimeout(() => void renderPreview(request), 60);
   }
 
   studio.addEventListener('click', event => {
@@ -169,9 +193,12 @@ export function bindAvatarStudio(root, { profile, onSelect, portrait }) {
     if (control === choose) return file.click();
     if (control === useDefault) return selectAvatar(null);
     if (control.matches('[data-avatar-preset]')) return selectAvatar({ kind: 'preset', id: control.dataset.avatarPreset });
-    if (control !== usePhoto || pending) return;
-    win.cancelAnimationFrame(frame);
-    renderPreview();
+    if (control === comparePhoto && image) {
+      showingOriginal = !showingOriginal;
+      syncComparison();
+      return;
+    }
+    if (control !== usePhoto || pending || usePhoto.disabled) return;
     if (!generated) return;
     if (current?.kind !== 'photo' || current.data !== generated) selectAvatar({ kind: 'photo', data: generated });
     notify('已选用这张头像。');
@@ -193,6 +220,8 @@ export function bindAvatarStudio(root, { profile, onSelect, portrait }) {
     file.value = '';
     if (!selected) return;
     const request = ++upload;
+    previewId++;
+    win.clearTimeout(timer);
     pending = true;
     usePhoto.disabled = true;
     notify('正在读取照片…');
@@ -205,16 +234,20 @@ export function bindAvatarStudio(root, { profile, onSelect, portrait }) {
       image?.close();
       image = next;
       generated = undefined;
+      photoPreview.removeAttribute('src');
+      photoEmpty.textContent = '正在生成预览';
+      showingOriginal = false;
       for (const range of ranges) range.value = range.defaultValue;
       workspace.hidden = false;
       choose.textContent = '更换照片';
-      notify();
+      syncComparison();
+      pending = false;
+      queuePreview();
     } catch (error) {
-      if (!signal.aborted && request === upload) notify(error.message || '读取失败，请换一张照片。', true);
-    } finally {
       if (!signal.aborted && request === upload) {
         pending = false;
-        renderPreview();
+        usePhoto.disabled = !generated;
+        notify(error.message || '读取失败，请换一张照片。', true);
       }
     }
   }, { signal });
@@ -232,7 +265,7 @@ export function bindAvatarStudio(root, { profile, onSelect, portrait }) {
 
   return () => {
     listeners.abort();
-    win.cancelAnimationFrame(frame);
+    win.clearTimeout(timer);
     image?.close();
     photoPreview.removeAttribute('src');
   };

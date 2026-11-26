@@ -6,6 +6,7 @@ const boards = {
   featured: { label: '上电视次数', unit: '次' },
 };
 const gifts = Object.values(SOCIAL_GIFTS);
+const feedFilters = { all: '全部动态', message: '发言', gift: '赠礼' };
 const number = new Intl.NumberFormat('zh-CN');
 const shortTime = new Intl.DateTimeFormat('zh-CN', {
   month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -38,24 +39,27 @@ function giftArt(ctx, gift, cssClass = '', loading = 'lazy') {
 
 function featureMarkup(ctx, board) {
   const event = board?.featured;
-  if (!event) return '<p>送出标有「上电视」的礼物，赠礼动态会登上这里。</p>';
+  if (!event) return '<div class="plaza-feature-empty"><span>候播中</span><p>带有「上电视」的赠礼会在广场和厂区同步播出。</p></div>';
   const { from, to } = event;
   const gift = SOCIAL_GIFTS[event.giftId];
   return `<div class="plaza-feature-event">
     ${giftArt(ctx, gift, 'plaza-feature-gift', 'eager')}
     <div><p><strong>${ctx.escape(personName(from))}</strong> 送给 <strong>${ctx.escape(personName(to))}</strong></p>
-      <p class="plaza-feature-name">${ctx.escape(gift?.name ?? '工坊礼物')}</p></div>
+      <p class="plaza-feature-name">${ctx.escape(gift?.name ?? '工坊礼物')}</p>
+      ${timeMarkup(event.at)}</div>
     <div class="plaza-feature-people">${avatar(ctx, from)}${avatar(ctx, to)}</div>
   </div>`;
 }
 
-function feedMarkup(ctx, messages) {
+function feedMarkup(ctx, messages, filter = 'all') {
   if (!messages) return '<p class="plaza-empty">正在加载世界频道…</p>';
   if (!messages.length) return '<p class="plaza-empty">还没有世界消息。</p>';
-  return `<ol class="plaza-feed-list">${messages.map((entry) => {
+  const entries = filter === 'all' ? messages : messages.filter(({ type }) => type === filter);
+  if (!entries.length) return `<p class="plaza-empty">当前没有${feedFilters[filter]}动态。</p>`;
+  return `<ol class="plaza-feed-list">${entries.map((entry) => {
     const gift = SOCIAL_GIFTS[entry.giftId];
     const isGift = entry.type === 'gift';
-    return `<li class="plaza-feed-entry" data-entry-type="${isGift ? 'gift' : 'message'}">
+    return `<li class="plaza-feed-entry" data-entry-type="${isGift ? 'gift' : 'message'}"${entry.featured ? ' data-entry-featured' : ''}>
       ${avatar(ctx, entry.from)}
       <div><div class="plaza-feed-meta"><strong>${ctx.escape(personName(entry.from))}</strong>${timeMarkup(entry.at)}</div>
         ${isGift
@@ -119,18 +123,25 @@ function giftOptions(ctx) {
 export function socialPage(ctx) {
   const { board, authenticated } = ctx.social.snapshot();
   return `<section class="container social-plaza" data-social-plaza>
-    <header class="plaza-header"><div><h1>社交广场</h1><p>和工友聊天、送礼，看看大家最近的广场动态。</p></div>
+    <header class="plaza-header"><div><h1>社交广场</h1><p>世界发言、工友赠礼与组队。</p></div>
       <nav aria-label="工友活动"><a href="#friends">工友名录</a><a href="#online">联机大厅</a><a href="#team">组队训练</a><a href="#help">工友求助</a></nav></header>
-    <section class="plaza-feature" aria-labelledby="plaza-feature-title">
-      <img class="plaza-feature-backdrop" src="${ctx.escape(ctx.asset('social'))}" alt="" decoding="async" fetchpriority="high">
-      <div class="plaza-feature-content"><h2 id="plaza-feature-title">工坊电视</h2>
-        <div data-sp-feature>${featureMarkup(ctx, board)}</div></div>
-    </section>
     <p class="plaza-notice" data-sp-service-error role="status" hidden></p>
     <div class="plaza-layout">
       <div class="plaza-main-column">
+        <section class="plaza-feature" aria-labelledby="plaza-feature-title">
+          <img class="plaza-feature-backdrop" src="${ctx.escape(ctx.asset('social'))}" alt="" decoding="async" fetchpriority="high">
+          <div class="plaza-feature-content"><div class="plaza-broadcast"><i aria-hidden="true"></i>世界广播</div>
+            <h2 id="plaza-feature-title">工坊电视</h2>
+            <div data-sp-feature>${featureMarkup(ctx, board)}</div></div>
+        </section>
         <section class="plaza-panel plaza-world" aria-labelledby="plaza-world-title">
-          <div class="plaza-panel-heading"><h2 id="plaza-world-title">世界频道</h2><button class="btn btn-text" type="button" data-sp-refresh>刷新</button></div>
+          <div class="plaza-panel-heading"><h2 id="plaza-world-title">世界频道</h2><span class="plaza-link-state" data-sp-connection>${board ? '已同步' : '正在连接'}</span></div>
+          <div class="plaza-feed-toolbar">
+            <div class="plaza-feed-filters" role="group" aria-label="筛选世界频道">
+              ${Object.entries(feedFilters).map(([key, label]) => `<button type="button" data-sp-feed-filter="${key}" aria-pressed="${key === 'all'}">${label}</button>`).join('')}
+            </div>
+            <button class="btn btn-text" type="button" data-sp-refresh>刷新</button>
+          </div>
           <div class="plaza-feed" data-sp-feed role="log" aria-label="世界消息" tabindex="0">${feedMarkup(ctx, board?.feed)}</div>
           <form class="plaza-composer" data-sp-composer novalidate${authenticated ? '' : ' hidden'}>
             <label class="sr-only" for="plaza-message">世界频道消息</label>
@@ -141,6 +152,16 @@ export function socialPage(ctx) {
           <div class="plaza-sign-in" data-sp-sign-in${authenticated ? ' hidden' : ''}>
             <p>启用或读取云存档后，即可发消息和送礼。</p><a href="#account" class="btn btn-secondary">去角色与存档</a></div>
         </section>
+      </div>
+      <aside class="plaza-side-column" aria-label="工友排行榜和名录">
+        <section class="plaza-panel plaza-rankings" aria-labelledby="plaza-rank-title">
+          <div class="plaza-panel-heading"><h2 id="plaza-rank-title">工友排行榜</h2></div>
+          <div class="plaza-rank-tabs" role="tablist" aria-label="排行类型">
+            ${Object.entries(boards).map(([key, detail]) => `<button type="button" id="plaza-rank-${key}" role="tab" aria-controls="plaza-rank-panel"
+              aria-selected="${key === 'received'}" tabindex="${key === 'received' ? 0 : -1}" data-sp-ranking="${key}">${detail.label}</button>`).join('')}
+          </div>
+          <div id="plaza-rank-panel" role="tabpanel" aria-labelledby="plaza-rank-received" tabindex="0" data-sp-rank>${rankingMarkup(ctx, board, 'received')}</div>
+        </section>
         <section class="plaza-panel plaza-people" aria-labelledby="plaza-people-title">
           <div data-sp-people>${playersMarkup(ctx, board, authenticated)}</div>
           <details class="plaza-inbox" data-sp-inbox${authenticated ? '' : ' hidden'}>
@@ -148,15 +169,7 @@ export function socialPage(ctx) {
             <div data-sp-inbox-content>${inboxMarkup(ctx, board?.inbox ?? [])}</div>
           </details>
         </section>
-      </div>
-      <section class="plaza-panel plaza-rankings" aria-labelledby="plaza-rank-title">
-        <div class="plaza-panel-heading"><h2 id="plaza-rank-title">工友排行榜</h2></div>
-        <div class="plaza-rank-tabs" role="tablist" aria-label="排行类型">
-          ${Object.entries(boards).map(([key, detail]) => `<button type="button" id="plaza-rank-${key}" role="tab" aria-controls="plaza-rank-panel"
-            aria-selected="${key === 'received'}" tabindex="${key === 'received' ? 0 : -1}" data-sp-ranking="${key}">${detail.label}</button>`).join('')}
-        </div>
-        <div id="plaza-rank-panel" role="tabpanel" aria-labelledby="plaza-rank-received" tabindex="0" data-sp-rank>${rankingMarkup(ctx, board, 'received')}</div>
-      </section>
+      </aside>
     </div>
     <dialog class="plaza-gift-dialog" aria-labelledby="plaza-gift-title" aria-describedby="plaza-gift-recipient" data-sp-dialog>
       <form class="plaza-gift-form" data-sp-gift-form novalidate>
@@ -185,6 +198,7 @@ export function bindSocialPage(root, ctx) {
   const inboxContent = select('inbox-content');
   const rank = select('rank');
   const refresh = select('refresh');
+  const connection = select('connection');
   const serviceError = select('service-error');
   const composer = select('composer');
   const input = composer.elements.namedItem('message');
@@ -196,6 +210,7 @@ export function bindSocialPage(root, ctx) {
   const giftButton = giftForm.querySelector('[type="submit"]');
   const giftStatus = select('gift-status');
   const tabs = [...page.querySelectorAll('[data-sp-ranking]')];
+  const filterButtons = [...page.querySelectorAll('[data-sp-feed-filter]')];
   const listeners = new AbortController();
   const { signal } = listeners;
   const initial = ctx.social.snapshot();
@@ -207,6 +222,7 @@ export function bindSocialPage(root, ctx) {
     [rank, rankingMarkup(ctx, initial.board, 'received')],
   ]);
   let ranking = 'received';
+  let feedFilter = 'all';
   let giftTarget = null;
   let sending = false;
   let gifting = false;
@@ -225,6 +241,10 @@ export function bindSocialPage(root, ctx) {
     if (signal.aborted) return;
     const { board, error, busy, authenticated } = ctx.social.snapshot();
     refresh.disabled = Boolean(busy);
+    const channelState = error ? 'offline' : board ? 'online' : 'loading';
+    const connectionLabel = error ? '连接异常' : board ? '已同步' : '正在连接';
+    if (connection.dataset.state !== channelState) connection.dataset.state = channelState;
+    if (connection.textContent !== connectionLabel) connection.textContent = connectionLabel;
     const notice = error ? errorText(error, '暂时无法读取广场，请刷新重试。') : '';
     serviceError.hidden = !notice;
     if (serviceError.textContent !== notice) serviceError.textContent = notice;
@@ -238,7 +258,7 @@ export function bindSocialPage(root, ctx) {
     const follow = feed.scrollHeight - feed.clientHeight - feed.scrollTop < 36;
     const oldScroll = feed.scrollTop;
     update(select('feature'), featureMarkup(ctx, board));
-    update(feed, feedMarkup(ctx, board?.feed ?? (error ? [] : undefined)));
+    update(feed, feedMarkup(ctx, board?.feed ?? (error ? [] : undefined), feedFilter));
     feed.scrollTop = follow ? feed.scrollHeight : oldScroll;
     const active = page.ownerDocument.activeElement;
     const playerFocus = people.contains(active) && active.dataset.spGiftTarget;
@@ -264,6 +284,13 @@ export function bindSocialPage(root, ctx) {
     sync();
   }
 
+  function changeFeed(filter) {
+    feedFilter = filter;
+    for (const button of filterButtons) button.setAttribute('aria-pressed', String(button.dataset.spFeedFilter === filter));
+    sync();
+    feed.scrollTop = feed.scrollHeight;
+  }
+
   async function reload() {
     try { await ctx.social.refresh(); } catch (error) {
       if (signal.aborted) return;
@@ -275,6 +302,8 @@ export function bindSocialPage(root, ctx) {
   page.addEventListener('click', (event) => {
     const tab = event.target.closest('[data-sp-ranking]');
     if (tab) return changeRank(tab);
+    const filter = event.target.closest('[data-sp-feed-filter]');
+    if (filter) return changeFeed(filter.dataset.spFeedFilter);
     if (event.target.closest('[data-sp-refresh]')) return void reload();
     if (event.target.closest('[data-sp-close]')) return dialog.close();
     const control = event.target.closest('[data-sp-gift-target]');
@@ -328,6 +357,7 @@ export function bindSocialPage(root, ctx) {
       if (result?.ok === false) throw Error(errorText(result.error, '发送失败，请重试。'));
       if (signal.aborted) return;
       if (input.value === draft) input.value = '';
+      if (feedFilter === 'gift') changeFeed('all');
       messageStatus.dataset.kind = 'success';
       messageStatus.textContent = '已发送';
     } catch (error) {

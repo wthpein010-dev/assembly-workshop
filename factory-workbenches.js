@@ -217,12 +217,15 @@ function progress(run) {
   </div>`;
 }
 
-function itemButton(id, kind, disabled) {
+const placeKeys = ['Z', 'X', 'C'];
+const shortcut = (key, disabled) => disabled ? '' : ` data-factory-key="${key}" aria-keyshortcuts="${key}"`;
+
+function itemButton(id, kind, disabled, index) {
   const [label, , mark] = props[id];
   const moving = kind === 'move';
   return `<button type="button" class="fwb-piece" ${moving
     ? `data-fwb-item="${id}" draggable="${!disabled}" aria-pressed="false"`
-    : `data-fwb-scan="${id}"`}${disabled ? ' disabled' : ''}>
+    : `data-fwb-scan="${id}"`}${shortcut(index + 1, disabled)}${disabled ? ' disabled' : ''}>
     ${propArt(id)}
     <strong>${label}</strong>
     <small>${moving ? mark : id === 'meter' ? '模拟量表' : '<span class="fwb-barcode" aria-hidden="true"></span>扫码'}</small>
@@ -232,14 +235,14 @@ function itemButton(id, kind, disabled) {
 function moveForm(stage, run, disabled) {
   return `<div class="fwb-control">
     <p class="fwb-strip-label">可用物料</p>
-    <div class="fwb-tray" aria-label="可用物料">${stage.items.map((id) => itemButton(id, 'move', disabled)).join('')}</div>
+    <div class="fwb-tray" aria-label="可用物料">${stage.items.map((id, index) => itemButton(id, 'move', disabled, index)).join('')}</div>
     <p class="fwb-strip-label">放置区</p>
     <div class="fwb-targets" aria-label="放置区">
-      ${stage.targets.map((id) => {
+      ${stage.targets.map((id, index) => {
         const [label, mark, category] = receivers[id];
         const placed = run.placements[id];
         const tone = run.feedback?.target === id ? run.feedback.kind : '';
-        return `<button type="button" class="fwb-slot" data-fwb-slot="${id}" data-shape="${category}" data-tone="${tone}"${disabled ? ' disabled' : ''}>
+        return `<button type="button" class="fwb-slot" data-fwb-slot="${id}" data-shape="${category}" data-tone="${tone}"${shortcut(placeKeys[index], disabled)}${disabled ? ' disabled' : ''}>
           ${placed?.length
             ? `<span class="fwb-slot-loaded" title="${placed.map((part) => props[part][0]).join('、')}">${propArt(placed.at(-1))}<b>${placed.length}</b></span>`
             : '<span class="fwb-slot-mark" aria-hidden="true"></span>'}
@@ -251,7 +254,7 @@ function moveForm(stage, run, disabled) {
 }
 
 function commandButton(stage, disabled) {
-  return `<button type="button" class="fwb-primary fwb-command" data-fwb-command="${stage.item}"${disabled ? ' disabled' : ''}>
+  return `<button type="button" class="fwb-primary fwb-command" data-fwb-command="${stage.item}"${shortcut('Enter', disabled)}${disabled ? ' disabled' : ''}>
     <span aria-hidden="true">⏻</span>${stage.label}</button>`;
 }
 
@@ -277,7 +280,7 @@ function actionForm(stage, run, disabled) {
   if (stage.kind === 'move') return moveForm(stage, run, disabled);
   if (stage.kind === 'adjust') return adjustForm(stage, run, disabled);
   if (stage.kind === 'command') return `<div class="fwb-console">${commandButton(stage, disabled)}</div>`;
-  return `<div class="fwb-scan" aria-label="${stage.title}">${stage.items.map((id) => itemButton(id, 'scan', disabled)).join('')}</div>`;
+  return `<div class="fwb-scan" aria-label="${stage.title}">${stage.items.map((id, index) => itemButton(id, 'scan', disabled, index)).join('')}</div>`;
 }
 
 function resultPage(run) {
@@ -294,17 +297,18 @@ function resultPage(run) {
 
 const keyboardMove = { ArrowLeft: ['x', -1], ArrowRight: ['x', 1], ArrowUp: ['y', 1], ArrowDown: ['y', -1] };
 
-export function mountFactoryWorkbench(container, { id, onComplete } = {}) {
+export function mountFactoryWorkbench(container, { id, onComplete, keyboardScope = container } = {}) {
   let run = createWorkbenchRun(id);
   if (!run || !container) return () => {};
   const document = container.ownerDocument;
   const root = document.createElement('div');
   root.className = 'factory-workbench';
   root.dataset.fwb = id;
-  root.innerHTML = '<div data-fwb-body></div><p class="fwb-note" data-fwb-feedback role="status" aria-live="polite"></p><div class="fwb-footer" data-fwb-footer></div>';
+  root.innerHTML = '<div data-fwb-body></div><p class="fwb-note" data-fwb-feedback role="status" aria-live="polite"></p><p class="fwb-hotkeys" data-fwb-hotkeys></p><div class="fwb-footer" data-fwb-footer></div>';
   const content = root.querySelector('[data-fwb-body]');
   const notice = root.querySelector('[data-fwb-feedback]');
   const footer = root.querySelector('[data-fwb-footer]');
+  const hotkeys = root.querySelector('[data-fwb-hotkeys]');
   let selected = null;
   let dragPayload = '';
   const controller = new AbortController();
@@ -336,8 +340,14 @@ export function mountFactoryWorkbench(container, { id, onComplete } = {}) {
     notice.dataset.tone = run.feedback?.kind ?? 'ready';
     notice.textContent = run.feedback?.message ?? (stage.kind === 'move' ? '可用鼠标拖放，也可先点物料再点放置区。'
       : stage.kind === 'adjust' ? '点击方向钮，或聚焦校准平面后使用方向键。' : '');
-    footer.innerHTML = run.result ? '<button type="button" class="fwb-primary" data-fwb-action="replay">再练一轮</button>'
-      : blocked ? '<button type="button" class="fwb-primary" data-fwb-action="retry">重试当前工序</button>' : '';
+    footer.innerHTML = run.result ? `<button type="button" class="fwb-primary" data-fwb-action="replay"${shortcut('R')}>再练一轮</button>`
+      : blocked ? `<button type="button" class="fwb-primary" data-fwb-action="retry"${shortcut('R')}>重试当前工序</button>` : '';
+    hotkeys.innerHTML = run.result || blocked ? '' : ({
+      move: '<kbd>1–3</kbd> 选物料　<kbd>Z / X / C</kbd> 放入槽位',
+      scan: '<kbd>1–3</kbd> 扫描对应条码',
+      adjust: '<kbd>方向键</kbd> 微调　<kbd>Enter</kbd> 检测',
+      command: '<kbd>Enter</kbd> 执行',
+    }[stage.kind] ?? '');
   }
 
   function focusFirst() {
@@ -390,12 +400,23 @@ export function mountFactoryWorkbench(container, { id, onComplete } = {}) {
     }
   }, { signal: controller.signal });
 
-  root.addEventListener('keydown', (event) => {
-    if (!event.target.matches('[data-fwb-adjust]') || !Object.hasOwn(keyboardMove, event.key)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const [axis, delta] = keyboardMove[event.key];
-    submit({ type: 'nudge', axis, delta }, true, '[data-fwb-adjust]');
+  keyboardScope.addEventListener('keydown', (event) => {
+    if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey ||
+        container.hidden || document.querySelector('dialog[open]') ||
+        event.target?.isContentEditable || event.target?.closest?.('input, textarea, select')) return;
+    if (Object.hasOwn(keyboardMove, event.key) && root.querySelector('[data-fwb-adjust][tabindex="0"]')) {
+      event.preventDefault();
+      const [axis, delta] = keyboardMove[event.key];
+      submit({ type: 'nudge', axis, delta }, true, '[data-fwb-adjust]');
+      return;
+    }
+    if (event.repeat || event.shiftKey || (event.key === 'Enter' && event.target.closest('button, a'))) return;
+    const match = [...root.querySelectorAll('[data-factory-key]:enabled')].find(button =>
+      button.dataset.factoryKey.toLowerCase() === event.key.toLowerCase());
+    if (match) {
+      event.preventDefault();
+      match.click();
+    }
   }, { signal: controller.signal });
 
   const dragType = 'application/x-factory-workbench-part';

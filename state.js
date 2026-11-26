@@ -1,17 +1,17 @@
 import { normalizeRecovery } from './factory-recovery.js';
-import { normalizeAvatar } from './avatar-catalog.js';
+import { normalizeAvatar } from './avatar-catalog.js?v=pc1';
+import { normalizeActivities } from './activities.js';
+import { FACE_LABELS, HAIR_LABELS, TONES } from './character-appearance.js';
+export { FACE_LABELS, HAIR_LABELS, TONES };
 
 export const SAVE_KEY = 'assembly-workshop.progress.v1';
 export const WORK_GROUPS = ['装配一组', '质检二组', '设备支持组'];
-export const FACE_LABELS = ['标准', '清秀', '英气', '稳重'];
-export const HAIR_LABELS = ['原版', '利落', '整理'];
-export const TONES = ['自然', '暖色', '深色'];
 
 export function initialState() {
   return {
     version: 1, profile: null, xp: 0, coins: 240,
     skills: { assembly: 0, quality: 0, repair: 0 },
-    track: null, community: null, recovery: normalizeRecovery(), onlineCompleted: [],
+    track: null, community: null, recovery: normalizeRecovery(), onlineCompleted: [], activities: normalizeActivities(),
   };
 }
 
@@ -47,6 +47,7 @@ export function normalizeSave(value) {
     track: object(value.track),
     community: object(value.community),
     recovery: normalizeRecovery(value.recovery),
+    activities: normalizeActivities(value.activities),
     onlineCompleted: Array.isArray(value.onlineCompleted) ? value.onlineCompleted.filter(id => typeof id === 'string').slice(-80) : [],
   };
 }

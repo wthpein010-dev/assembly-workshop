@@ -1,5 +1,6 @@
 import { SOCIAL_GIFTS } from '../social-gifts.js';
 import { normalizeAvatar } from '../avatar-catalog.js';
+import { FACE_LABELS, HAIR_LABELS, TONES } from '../character-appearance.js';
 
 const feedLimit = 60;
 const playerLimit = 60;
@@ -27,9 +28,9 @@ export function publicProfileSql(alias) {
     ELSE 0 END`;
   return `json_object(
     'gender', CASE json_extract(${alias}.state, '$.profile.gender') WHEN 'male' THEN 'male' ELSE 'female' END,
-    'face', ${numeric('face', 3)},
-    'hair', ${numeric('hair', 2)},
-    'tone', ${numeric('tone', 2)},
+    'face', ${numeric('face', FACE_LABELS.length - 1)},
+    'hair', ${numeric('hair', HAIR_LABELS.length - 1)},
+    'tone', ${numeric('tone', TONES.length - 1)},
     'group', ${numeric('group', 2)},
     'avatar', json(CASE json_extract(${alias}.state, '${avatar}.kind')
       WHEN 'preset' THEN CASE

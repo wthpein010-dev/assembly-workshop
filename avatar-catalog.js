@@ -13,10 +13,10 @@ export const AVATAR_CATEGORIES = Object.freeze(categoryList.map(([id, label, nam
 export const PRESET_AVATARS = Object.freeze(Object.fromEntries(
   AVATAR_CATEGORIES.flatMap(category => category.avatars.map(avatar => [avatar.id, avatar])),
 ));
-export const PHOTO_DATA_LIMIT = 16000;
-const photoPattern = /^data:(image\/(?:webp|jpeg));base64,((?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)$/;
-const maxSide = 256;
-const validSize = (width, height) => width > 0 && height > 0 && width <= maxSide && height <= maxSide;
+export const PHOTO_DATA_LIMIT = 44_000;
+export const PHOTO_OUTPUT_SIZE = 320;
+const photoPattern = /^data:(image\/(?:webp|jpeg));base64,([A-Za-z0-9+/]+={0,2})$/;
+const validSize = (width, height) => width > 0 && height > 0 && width <= PHOTO_OUTPUT_SIZE && height <= PHOTO_OUTPUT_SIZE;
 const byte = (binary, index) => binary.charCodeAt(index);
 
 function webpDimensions(binary) {
@@ -73,7 +73,7 @@ export function normalizeAvatar(value) {
   }
   if (value.kind !== 'photo' || typeof value.data !== 'string' || value.data.length > PHOTO_DATA_LIMIT) return null;
   const match = photoPattern.exec(value.data);
-  if (!match?.[2]) return null;
+  if (!match || match[0].length !== value.data.length || match[2].length % 4 !== 0) return null;
   const binary = atob(match[2]);
   const valid = match[1] === 'image/webp' ? webpDimensions(binary) : jpegDimensions(binary);
   return valid ? { kind: 'photo', data: value.data } : null;

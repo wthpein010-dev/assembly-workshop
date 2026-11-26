@@ -1,0 +1,44 @@
+.portrait.portrait-layered {
+  position: relative;
+  isolation: isolate;
+  background: radial-gradient(ellipse at 52% 36%, #3b4b5a 0%, #24313f 58%, #151f2a 96%);
+  filter: none;
+}
+.portrait.large.portrait-layered { aspect-ratio: 1; }
+.portrait-layered > span {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.portrait-layered > .portrait-face {
+  background-image: url("./assets/character-faces.webp");
+  background-size: 400% 400%;
+  background-position: var(--face-x) var(--face-y);
+}
+.portrait-layered > .portrait-hair {
+  background-image: url("./assets/character-hair.webp");
+  background-size: 400% 400%;
+  background-position: var(--hair-x) var(--hair-y);
+}
+.portrait-layered > .portrait-skin {
+  display: none;
+  mask-image: url("./assets/character-skin.webp");
+  mask-size: 400% 400%;
+  mask-position: var(--face-x) var(--face-y);
+  mask-repeat: no-repeat;
+  mix-blend-mode: multiply;
+}
+.portrait-layered[data-skin="1"] > .portrait-skin { display: block; background: #d39a71; opacity: .44; }
+.portrait-layered[data-skin="2"] > .portrait-skin { display: block; background: #9a6854; opacity: .59; }
+.creator .choice-block .choices { gap: .42rem; }
+.creator .choice[data-choice="hair"],
+.creator .choice[data-choice="face"] { text-align: center; min-inline-size: 4rem; }
+.creator .choice[data-choice="hair"] { min-inline-size: 5.1rem; padding-inline: .42rem; }
+.toast[data-kind="error"] { border-color: #dc9c94; border-inline-start-color: #ff9a8b; color: #ffe2dd; background: #3e252b; }
+.toast[data-kind="error"]::before { background: linear-gradient(90deg, #ff9a8b, transparent 85%); }
+#nick[aria-invalid="true"] { border-color: #e48983; }
+
+@media (max-width: 30rem) {
+  .creator .choice[data-choice="hair"] { min-inline-size: 4.55rem; font-size: .84rem; }
+}

@@ -1,17 +1,18 @@
+import { PHOTO_DATA_LIMIT, PHOTO_OUTPUT_SIZE } from './avatar-catalog.js?v=avatarhd1';
+
 export const PHOTO_STYLES = Object.freeze([
-  Object.freeze({ id: 'comic', label: '漫画' }),
-  Object.freeze({ id: 'duotone', label: '双色插画' }),
+  Object.freeze({ id: 'portrait', label: '柔光插画' }),
+  Object.freeze({ id: 'comic', label: '清线漫画' }),
+  Object.freeze({ id: 'duotone', label: '双色海报' }),
   Object.freeze({ id: 'pixel', label: '像素' }),
 ]);
 
-const outputSize = 144;
 const maxZoom = 3;
 const minSide = 64;
-const maxSide = 1200;
+const maxSide = 1920;
 const maxPixels = 60_000_000;
 const maxFileBytes = 16 * 1024 * 1024;
-const maxAvatarChars = 16_000;
-const styles = new Map(PHOTO_STYLES.map(({ id }) => [id, id === 'pixel' ? 24 : 112]));
+const styles = new Set(PHOTO_STYLES.map(({ id }) => id));
 const clamp = (number, min, max) => Math.min(max, Math.max(min, number));
 const lightness = (r, g, b) => r * .2126 + g * .7152 + b * .0722;
 
@@ -71,15 +72,29 @@ function position(value) {
   return (clamp(Number(value) || 0, -100, 100) + 100) / 200;
 }
 
-function comic(image, size) {
+export function paintPhotoCrop(context, photo, { zoom = 1, x = 0, y = 0 } = {}) {
+  const size = context.canvas.width;
+  const side = Math.min(photo.width, photo.height) / clamp(Number(zoom) || 1, 1, maxZoom);
+  context.fillStyle = '#e7dac1';
+  context.fillRect(0, 0, size, size);
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(photo, (photo.width - side) * position(x), (photo.height - side) * position(y),
+    side, side, 0, 0, size, size);
+}
+
+function illustrate(image, size, contours) {
   const pixels = image.data;
   const original = pixels.slice();
   const luma = new Float32Array(size * size);
+  let total = 0;
   for (let i = 0; i < luma.length; i++) {
     const offset = i * 4;
     luma[i] = lightness(original[offset], original[offset + 1], original[offset + 2]);
+    total += luma[i];
   }
-  const ink = [24, 38, 54];
+  const exposure = clamp((138 - total / luma.length) * .33, -8, 20);
+  const tint = contours ? [2, 0, 1] : [4, 1, -2];
+  const ink = [30, 41, 55];
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
@@ -87,16 +102,21 @@ function comic(image, size) {
       const right = x + 1 < size ? i + 1 : i;
       const top = y ? i - size : i;
       const bottom = y + 1 < size ? i + size : i;
-      const edge = Math.hypot(luma[left] - luma[right], luma[top] - luma[bottom]);
-      const outline = clamp((edge - 23) / 105, 0, .72);
-      const softened = luma[i] * .55 + (luma[left] + luma[right] + luma[top] + luma[bottom]) * .1125;
-      const shade = clamp(Math.round((softened * 1.04 + 6) / 21) * 21, 10, 251);
+      const center = luma[i];
+      const local = (luma[left] + luma[right] + luma[top] + luma[bottom]) * .25;
+      const edge = Math.max(Math.abs(luma[left] - luma[right]), Math.abs(luma[top] - luma[bottom]));
+      const softening = contours ? clamp((37 - edge) / 78, 0, .39) : clamp((28 - edge) / 140, 0, .19);
+      const outline = contours ? clamp((edge - 20) / 185, 0, .32) : 0;
+      const midtone = clamp(1 - Math.abs(center - 124) / 142, 0, 1);
+      const detailed = center + clamp(center - local, -14, 14) * .48;
+      const adjusted = detailed + midtone * (exposure + (center - 126) * (contours ? .16 : .065));
+      const shade = contours ? adjusted + (Math.round(adjusted / 22) * 22 - adjusted) * .54 : adjusted;
       for (let channel = 0; channel < 3; channel++) {
         const offset = i * 4 + channel;
         const nearby = (original[left * 4 + channel] + original[right * 4 + channel]
           + original[top * 4 + channel] + original[bottom * 4 + channel]) / 4;
-        const color = original[offset] * .55 + nearby * .45;
-        const paint = shade + (color - softened) * 1.12;
+        const color = original[offset] + (nearby - original[offset]) * softening;
+        const paint = shade + (color - center) * (contours ? 1.19 : 1.05) + tint[channel] * midtone;
         pixels[offset] = paint * (1 - outline) + ink[channel] * outline;
       }
     }
@@ -105,10 +125,10 @@ function comic(image, size) {
 
 function duotone(image) {
   const pixels = image.data;
-  const shades = [[20, 34, 55], [55, 103, 129], [192, 137, 98], [255, 234, 190]];
+  const shades = [[19, 26, 46], [66, 104, 136], [189, 160, 148], [255, 240, 215]];
   for (let i = 0; i < pixels.length; i += 4) {
     const luma = lightness(pixels[i], pixels[i + 1], pixels[i + 2]);
-    const tone = Math.round(clamp((luma - 16) / 225, 0, 1) * 15) / 5;
+    const tone = clamp((luma - 9) / 243, 0, 1) * 3;
     const lower = Math.min(2, Math.floor(tone));
     const between = tone - lower;
     for (let channel = 0; channel < 3; channel++) {
@@ -119,7 +139,7 @@ function duotone(image) {
 
 function pixelate(image, size) {
   const pixels = image.data;
-  const dither = [-6, 3, 6, -3];
+  const dither = [-4, 2, 4, -2];
   for (let i = 0; i < pixels.length; i += 4) {
     const x = (i / 4) % size;
     const y = Math.floor(i / 4 / size);
@@ -127,42 +147,44 @@ function pixelate(image, size) {
     const luma = lightness(pixels[i], pixels[i + 1], pixels[i + 2]);
     for (let channel = 0; channel < 3; channel++) {
       const color = luma + (pixels[i + channel] - luma) * 1.22 + shift;
-      pixels[i + channel] = 8 + Math.round(color / 31) * 30;
+      pixels[i + channel] = 6 + Math.round(color / 24) * 24;
     }
   }
 }
 
-function encodeAvatar(canvas) {
-  let mime = 'image/webp';
-  for (const quality of [.88, .72, .54, .35, .18]) {
-    let data = canvas.toDataURL(mime, quality);
-    if (!data.startsWith('data:' + mime + ';base64,')) {
-      mime = 'image/jpeg';
-      data = canvas.toDataURL(mime, quality);
+async function encodeAvatar(canvas) {
+  const encode = (type, quality) => new Promise(resolve => canvas.toBlob(resolve, type, quality));
+  const qualitySteps = [.95, .89, .82, .73, .62, .49, .34, .20, .10];
+  for (const mime of ['image/webp', 'image/jpeg']) {
+    for (const quality of qualitySteps) {
+      const blob = await encode(mime, quality);
+      if (blob?.type !== mime) break;
+      if (Math.ceil(blob.size / 3) * 4 + 23 > PHOTO_DATA_LIMIT) continue;
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('无法读取生成的头像，请重试。'));
+        reader.readAsDataURL(blob);
+      });
     }
-    if (data.startsWith('data:' + mime + ';base64,') && data.length <= maxAvatarChars) return data;
   }
   throw new Error('这张头像压缩失败，请换张照片或试试其他风格。');
 }
 
-export function renderPhotoAvatar(photo, { style = 'comic', zoom = 1, x = 0, y = 0 } = {}) {
+export async function renderPhotoAvatar(photo, { style = 'portrait', ...crop } = {}) {
   if (!photo?.width || !photo?.height) throw new Error('请先选择一张照片。');
-  const size = styles.get(style);
-  if (!size) throw new Error('请选择一种头像风格。');
-  const side = Math.min(photo.width, photo.height) / clamp(Number(zoom) || 1, 1, maxZoom);
+  if (!styles.has(style)) throw new Error('请选择一种头像风格。');
+  const size = style === 'pixel' ? 40 : PHOTO_OUTPUT_SIZE;
   const sample = layer(size, true);
-  sample.fillStyle = '#e7dac1';
-  sample.fillRect(0, 0, size, size);
-  sample.imageSmoothingQuality = 'high';
-  sample.drawImage(photo, (photo.width - side) * position(x), (photo.height - side) * position(y),
-    side, side, 0, 0, size, size);
+  paintPhotoCrop(sample, photo, crop);
   const image = sample.getImageData(0, 0, size, size);
-  if (style === 'comic') comic(image, size);
+  if (style === 'portrait' || style === 'comic') illustrate(image, size, style === 'comic');
   if (style === 'duotone') duotone(image);
   if (style === 'pixel') pixelate(image, size);
   sample.putImageData(image, 0, 0);
-  const output = layer(outputSize);
-  output.imageSmoothingEnabled = style !== 'pixel';
-  output.drawImage(sample.canvas, 0, 0, outputSize, outputSize);
+  if (style !== 'pixel') return encodeAvatar(sample.canvas);
+  const output = layer(PHOTO_OUTPUT_SIZE);
+  output.imageSmoothingEnabled = false;
+  output.drawImage(sample.canvas, 0, 0, PHOTO_OUTPUT_SIZE, PHOTO_OUTPUT_SIZE);
   return encodeAvatar(output.canvas);
 }

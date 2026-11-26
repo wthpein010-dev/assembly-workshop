@@ -106,7 +106,7 @@
 .avatar-category > button[aria-pressed="true"],
 .avatar-tile[aria-pressed="true"] {
   color: var(--amber);
-  background: #fff3e9;
+  background: color-mix(in srgb, var(--amber) 13%, var(--panel));
   border-color: var(--amber);
 }
 .avatar-preset-grid {
@@ -154,11 +154,12 @@
 .avatar-studio .avatar-studio-status[data-error="true"] { color: var(--danger); }
 .avatar-photo-workspace {
   display: grid;
-  grid-template-columns: minmax(0, .65fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, .82fr) minmax(0, 1fr);
   align-items: start;
   gap: 1rem;
   margin-block-start: .85rem;
 }
+.avatar-photo-display { min-inline-size: 0; }
 .avatar-photo-preview {
   display: grid;
   place-items: center;
@@ -173,12 +174,23 @@
   text-align: center;
   font-size: .85rem;
 }
-.avatar-photo-preview img {
+.avatar-photo-preview :is(img, canvas) {
   inline-size: 100%;
   block-size: 100%;
   border-radius: .22rem;
   object-fit: cover;
 }
+.avatar-photo-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .12rem .5rem;
+  margin-block-start: .3rem;
+  color: var(--muted);
+}
+.avatar-photo-preview-actions .btn { min-block-size: 2rem; padding-block: .2rem; }
+.avatar-photo-preview-actions .btn[aria-pressed="true"] { color: var(--amber); }
 .avatar-photo-controls { display: grid; gap: .55rem; min-inline-size: 0; }
 .avatar-photo-styles {
   min-inline-size: 0;
@@ -204,7 +216,11 @@
 }
 .form-panel .avatar-photo-styles label,
 .form-panel .avatar-photo-ranges label { display: flex; margin: 0; }
-.avatar-photo-styles label:has(:checked) { border-color: var(--amber); background: #fff3e9; color: var(--amber); }
+.avatar-photo-styles label:has(:checked) {
+  border-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 13%, var(--panel));
+  color: var(--amber);
+}
 .avatar-photo-styles input { margin: 0; accent-color: var(--amber); }
 .avatar-photo-ranges label {
   display: flex;
@@ -237,7 +253,7 @@
 @container (max-width: 27rem) {
   .avatar-category { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .avatar-photo-workspace { grid-template-columns: minmax(0, 1fr); }
-  .avatar-photo-preview { inline-size: min(100%, 9rem); }
+  .avatar-photo-display { inline-size: min(100%, 14rem); }
 }
 
 @container (max-width: 20rem) {

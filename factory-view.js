@@ -885,30 +885,10 @@ export function createFactoryScene(canvas, options = {}) {
 
   function onKeyDown(event) {
     if (!layout || event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
-    if (benchSession && (event.code === 'Escape' || event.key === 'Escape') && !doc.fullscreenElement &&
-        !event.target?.isContentEditable && !event.target?.closest?.('input, textarea, select')) {
-      event.preventDefault();
-      if (!event.repeat) exitBench();
-      return;
-    }
     if (doc.activeElement !== canvas && doc.pointerLockElement !== canvas) return;
-    if (benchSession) {
-      if (WALK_KEYS.has(event.code) || event.code === 'KeyV' || event.code === 'KeyE') event.preventDefault();
-      return;
-    }
-    if (event.code === 'KeyF' && freeRecoveryWalk()) {
-      event.preventDefault();
-      if (!event.repeat) pulseRecovery();
-    } else if (event.code === 'KeyV' || event.code === 'KeyE') {
-      event.preventDefault();
-      if (!event.repeat) {
-        if (event.code === 'KeyV') toggleMode();
-        else interact();
-      }
-    } else if (WALK_KEYS.has(event.code)) {
-      event.preventDefault();
-      keys.add(event.code);
-    }
+    if (benchSession || !WALK_KEYS.has(event.code) || doc.querySelector('dialog[open]')) return;
+    event.preventDefault();
+    keys.add(event.code);
   }
 
   function useDrag() {

@@ -1,4 +1,4 @@
-import { mountFactoryWorkbench } from './factory-workbenches.js';
+import { mountFactoryWorkbench } from './factory-workbenches.js?v=pc1';
 import { installRecoveryPart, normalizeRecovery, RECOVERY_PARTS, RECOVERY_RECIPES } from './factory-recovery.js';
 import { recoveryAssembly, recoveryCatalog, recoveryEventText, recoveryPhaseLabel, recoveryRecipeFor } from './factory-recovery-ui.js';
 import { factorySocialMarkup, bindFactorySocial } from './factory-social.js';
@@ -18,6 +18,16 @@ const destinations = [
   ['social', '社交广场'], ['online', '联机大厅'], ['help', '互助任务'], ['event', '工坊建设周'],
 ];
 const routeLabels = { hall: '返回大厅', missions: '打开任务手册', station: '前往模拟工位', team: '打开组队训练' };
+const slotKeys = ['Z', 'X', 'C'];
+
+const keyboardHelp = [
+  ['移动与平移', ['W', 'A', 'S', 'D'], '聚焦地图后移动，方向键也可用。'],
+  ['互动', ['E'], '靠近零件可拾取，靠近工作台可开始操作。'],
+  ['脉冲', ['F'], '故障机进入范围后可用，核心露出时效果最佳。'],
+  ['视角', ['V'], '在总览和步行之间切换。'],
+  ['操作工作台', ['1', '2', '3'], '选择物料或扫码，按 Z / X / C 放入对应槽位。校准用方向键，回车运行检测，R 重试。'],
+  ['返回', ['Esc'], '关闭当前面板、离开工作台或释放鼠标。'],
+];
 
 export function factoryPage(ctx) {
   const escape = ctx.escape;
@@ -53,22 +63,35 @@ export function factoryPage(ctx) {
             <div class="factory-crosshair" aria-hidden="true"></div>
             <div class="recovery-contact" data-recovery-contact hidden><strong data-recovery-target></strong><meter data-recovery-integrity min="0" max="1" value="1" aria-label="故障机核心耐久"></meter><span data-recovery-phase></span></div>
             <p class="recovery-feed" data-recovery-feed role="status" hidden></p>
-            <p class="factory-bench-hint" data-factory-bench-hint hidden></p>
+            <p class="factory-bench-hint" data-factory-bench-hint aria-hidden="true" hidden></p>
             <div class="factory-stick" data-factory-move aria-hidden="true">
               <span class="factory-stick-knob"></span>
             </div>
-            <button type="button" class="btn btn-primary factory-interact" data-factory-action="interact" hidden>互动</button>
-            <button type="button" class="btn recovery-pulse" data-recovery-pulse hidden><span>脉冲</span><kbd>F</kbd></button>
+            <button type="button" class="btn btn-primary factory-interact" data-factory-action="interact" data-factory-key="E" aria-keyshortcuts="E" hidden>互动</button>
+            <button type="button" class="btn recovery-pulse" data-recovery-pulse aria-keyshortcuts="F" hidden><span>脉冲</span><kbd aria-hidden="true">F</kbd></button>
             ${factorySocialMarkup()}
+            <dialog class="factory-shortcut-sheet" data-factory-shortcuts aria-labelledby="factory-shortcut-title">
+              <header class="factory-shortcut-header">
+                <h2 id="factory-shortcut-title">操作指南</h2>
+                <form method="dialog"><button type="submit" class="btn btn-secondary" autofocus>关闭</button></form>
+              </header>
+              <dl>${keyboardHelp.map(([label, keys, description]) => `<div>
+                <dt>${label}</dt>
+                <dd><span class="factory-key-group">${keys.map(key => `<kbd>${key}</kbd>`).join('')}</span><span>${description}</span></dd>
+              </div>`).join('')}</dl>
+            </dialog>
           </div>
           <div class="factory-console" id="factory-controls">
             <p data-factory-controls hidden>
-              <span class="factory-overview-help">点编号进入工作台 · 点击画面后 <kbd>WASD</kbd> / 方向键平移 · 右键拖拽 · 滚轮缩放</span>
+              <span class="factory-overview-help"><kbd>V</kbd> 步行 · 点击画面后用 <kbd>WASD</kbd> 平移 · 滚轮缩放</span>
               <span class="factory-pan-touch-help">拖动地图平移，点编号进入工作台。</span>
-              <span class="factory-key-help"><kbd>WASD</kbd> / <kbd>方向键</kbd> 移动 · 点击画面转向 · <kbd>E</kbd> 操作或拾取 · <kbd>F</kbd> 对准故障机发脉冲 · <kbd>Esc</kbd> 释放</span>
+              <span class="factory-key-help"><kbd>WASD</kbd> 移动 · <kbd>E</kbd> 互动 · <kbd>F</kbd> 脉冲 · <kbd>V</kbd> 总览</span>
               <span class="factory-touch-help">左侧圆盘移动，拖动画面转向。靠近零件可拾取，遇到故障机可发脉冲。</span>
             </p>
-            <button type="button" class="btn btn-secondary" data-factory-action="reset" hidden>回到入口</button>
+            <div class="factory-console-actions">
+              <button type="button" class="btn btn-secondary" data-factory-action="shortcuts" data-factory-key="H" aria-keyshortcuts="H Shift+/" aria-haspopup="dialog" hidden>操作指南</button>
+              <button type="button" class="btn btn-secondary" data-factory-action="reset" hidden>回到入口</button>
+            </div>
           </div>
           <p class="factory-notice" data-factory-announcement role="status" aria-live="polite"></p>
         </div>
@@ -93,7 +116,10 @@ export function factoryPage(ctx) {
         <section class="factory-bench-panel" data-factory-bench-panel aria-labelledby="factory-bench-title" hidden>
           <header class="factory-bench-header">
             <h2 id="factory-bench-title" data-factory-bench-title tabindex="-1"></h2>
-            <button type="button" class="btn btn-secondary" data-factory-action="leave-bench">离开工作台</button>
+            <div class="factory-console-actions">
+              <button type="button" class="btn btn-secondary" data-factory-action="shortcuts" data-factory-key="H" aria-keyshortcuts="H Shift+/" aria-haspopup="dialog">操作指南</button>
+              <button type="button" class="btn btn-secondary" data-factory-action="leave-bench" data-factory-key="Esc" aria-keyshortcuts="Escape">离开工作台</button>
+            </div>
           </header>
           <p class="factory-bench-transition" data-factory-bench-message role="status"></p>
           <div class="factory-directory-switch recovery-bench-tabs" data-recovery-tabs role="group" aria-label="工作台玩法" hidden>
@@ -124,6 +150,8 @@ export function bindFactoryPage(root, ctx) {
   const progress = find('[data-factory-progress]');
   const failure = find('[data-factory-error]');
   const controls = find('[data-factory-controls]');
+  const shortcuts = find('[data-factory-shortcuts]');
+  const shortcutButton = find('.factory-console [data-factory-action="shortcuts"]');
   const reset = find('[data-factory-action="reset"]');
   const fullscreen = find('[data-factory-action="fullscreen"]');
   const doc = page.ownerDocument;
@@ -198,6 +226,7 @@ export function bindFactoryPage(root, ctx) {
   let selectedPart;
   let draggedPart;
   let assemblyMessage;
+  let helpReturn;
   let disposed = false;
 
   function announce(text) {
@@ -252,6 +281,13 @@ export function bindFactoryPage(root, ctx) {
 
   function renderRecoveryAssembly() {
     recoveryAssemblyHost.innerHTML = recoveryAssembly(currentRecipe, recoveryProgress, selectedPart, assemblyMessage, ctx);
+    for (const [selector, keys] of [['[data-recovery-part]', ['1', '2', '3']], ['[data-recovery-slot]', slotKeys]]) {
+      recoveryAssemblyHost.querySelectorAll(selector).forEach((button, index) => {
+        if (button.disabled || !keys[index]) return;
+        button.dataset.factoryKey = keys[index];
+        button.setAttribute('aria-keyshortcuts', keys[index]);
+      });
+    }
   }
 
   function showBenchTab(tab) {
@@ -329,7 +365,11 @@ export function bindFactoryPage(root, ctx) {
     const canInteract = ready && !working && !transitioning && mode === 'walk';
     const part = canInteract && RECOVERY_PARTS[recoveryView?.nearbyDrop?.partId];
     const robot = canInteract && recoveryView?.nearbyRobot;
-    for (const button of modeButtons) button.disabled = !ready || working;
+    for (const button of modeButtons) {
+      button.disabled = !ready || working || transitioning;
+      if (!button.disabled && button.dataset.factoryMode !== mode) button.setAttribute('aria-keyshortcuts', 'V');
+      else button.removeAttribute('aria-keyshortcuts');
+    }
     reset.hidden = !ready || working;
     interact.hidden = !canInteract || !(part || nearbyBench || walkPoint?.route);
     interact.textContent = part ? '拾取零件' : nearbyBench ? '操作工作台' : '互动';
@@ -388,7 +428,14 @@ export function bindFactoryPage(root, ctx) {
       if (stage.getBoundingClientRect().top < 0) stage.scrollIntoView({ block: 'start' });
     }
     if (phase === 'ready') {
-      unmountGame = mountFactoryWorkbench(benchGame, { id: bench.id, onComplete: () => markPracticed(bench.id) });
+      unmountGame = mountFactoryWorkbench(benchGame, {
+        id: bench.id,
+        keyboardScope: benchPanel,
+        onComplete() {
+          markPracticed(bench.id);
+          ctx.recordActivity?.('workbench');
+        },
+      });
       currentRecipe = recoveryRecipeFor(bench.id);
       recoveryTabs.hidden = !currentRecipe;
       showBenchTab(currentRecipe && requestedRecipe === currentRecipe.id ? 'assembly' : 'practice');
@@ -462,6 +509,7 @@ export function bindFactoryPage(root, ctx) {
     loading.hidden = state !== 'loading';
     failure.hidden = state !== 'failed';
     controls.hidden = !ready;
+    shortcutButton.hidden = !ready;
     canvas.tabIndex = ready ? 0 : -1;
     if (ready) canvas.removeAttribute('aria-hidden');
     else canvas.setAttribute('aria-hidden', 'true');
@@ -496,7 +544,7 @@ export function bindFactoryPage(root, ctx) {
     const resources = loadFactoryAssets(workerProfile, controller.signal, updateProgress);
     resources.catch(() => {});
     try {
-      const { createFactoryScene } = await import('./factory-view.js?v=robot1');
+      const { createFactoryScene } = await import('./factory-view.js?v=pc1');
       if (!active()) return;
       scene = createFactoryScene(canvas, {
         recovery: recoveryProgress,
@@ -578,6 +626,51 @@ export function bindFactoryPage(root, ctx) {
   }
 
   const canWalk = () => ready && scene && mode === 'walk' && !transitioning && !benchSession;
+  function openShortcuts() {
+    helpReturn = page.contains(doc.activeElement) ? doc.activeElement : canvas;
+    stopMoving();
+    stopLooking();
+    if (doc.pointerLockElement === canvas) doc.exitPointerLock?.();
+    shortcuts.showModal();
+  }
+
+  shortcuts.addEventListener('close', () => {
+    if (!disposed) {
+      const target = helpReturn?.isConnected && !helpReturn.closest('[hidden]') ? helpReturn : ready ? canvas : shortcutButton;
+      target.focus({ preventScroll: true });
+    }
+  }, eventOptions);
+
+  doc.addEventListener('keydown', event => {
+    if (event.defaultPrevented || event.isComposing || event.repeat || event.ctrlKey || event.altKey || event.metaKey ||
+        event.target?.isContentEditable || event.target?.closest?.('input, textarea, select') ||
+        doc.querySelector('dialog[open]') || stage.querySelector('[data-factory-social][data-open="true"]')) return;
+    const key = event.key.toLowerCase();
+    if (key === 'h' || key === '?' || (event.shiftKey && event.code === 'Slash')) {
+      event.preventDefault();
+      openShortcuts();
+    } else if (key === 'escape' && benchSession && !doc.fullscreenElement && scene.exitBench()) {
+      event.preventDefault();
+    } else if (benchSession && benchPanel.contains(doc.activeElement) && !recoveryAssemblyHost.hidden) {
+      const choice = [...recoveryAssemblyHost.querySelectorAll('[data-factory-key]:enabled')]
+        .find(button => button.dataset.factoryKey === key.toUpperCase());
+      if (choice) {
+        event.preventDefault();
+        choice.click();
+      }
+    } else if (canWalk() && key === 'e' && !interact.hidden) {
+      event.preventDefault();
+      interact.click();
+    } else if (canWalk() && key === 'f' && !pulse.hidden && !pulse.disabled) {
+      event.preventDefault();
+      pulse.click();
+    } else if (ready && !benchSession && !transitioning && key === 'v') {
+      event.preventDefault();
+      focusAfterMode = true;
+      scene.toggleMode();
+    }
+  }, eventOptions);
+
   page.addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button || button.disabled) return;
@@ -634,6 +727,7 @@ export function bindFactoryPage(root, ctx) {
       return;
     }
     const action = button.dataset.factoryAction;
+    if (action === 'shortcuts') openShortcuts();
     if (action === 'retry') loadScene();
     if (action === 'leave-bench' && benchSession) scene.exitBench();
     if (action === 'fullscreen' && ready && !benchSession) void toggleFullscreen();
@@ -710,6 +804,7 @@ export function bindFactoryPage(root, ctx) {
   return () => {
     if (disposed) return;
     disposed = true;
+    if (shortcuts.open) shortcuts.close();
     downloads?.abort();
     stopMoving();
     stopLooking();
