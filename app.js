@@ -210,7 +210,7 @@ function hallPage() {
       <div class="milestones">${taskSummaries()}</div>
     </section>
     <section class="bay-links" aria-label="车间活动">
-      ${[['online','联机大厅','聊天、邀请其他玩家一起质检','yard'],['help','工友求助','发布卡点或协助他人','help-board'],['event','建设周','解锁班组荣誉与纪念工装','season']].map(([route,label,body,img]) =>
+      ${[['online','联机大厅','聊天、邀请其他玩家一起质检','yard'],['help','工友求助','发布卡点或协助他人','station'],['event','建设周','解锁班组荣誉与纪念工装','season']].map(([route,label,body,img]) =>
         `<a href="#${route}" class="bay-link" style="--bay-image:url('${asset(img)}')"><strong>${label}</strong><span>${body}</span></a>`).join('')}
     </section>
   </div>`;

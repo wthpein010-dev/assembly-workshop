@@ -267,7 +267,7 @@ function boardPage(state, ctx) {
   const track = state.track;
   const main = missions.filter(({ kind }) => kind === '主线');
   const complete = main.filter(({ id }) => done(track, id)).length;
-  return `<div class="training-page" data-training-root>
+  return `<div class="container training-page" data-training-root>
     <header class="training-page-hero" style="--training-scene:url('${ctx.asset('station')}')">
       <div class="training-page-hero-content">
         <div class="training-kicker"><span></span>训练中心</div>
@@ -417,7 +417,7 @@ function stationPage(state, ctx) {
   const run = track?.runs[mission.id];
   const finished = run && run.status !== 'active';
   const step = mission.steps[run?.step ?? 0];
-  return `<div class="training-page" data-training-root>
+  return `<div class="container training-page" data-training-root>
     <header class="training-header">
       <div>
         <div class="training-kicker"><span></span>${mission.area} · ${mission.code}</div>
@@ -444,7 +444,7 @@ function recordPage(state, ctx) {
   const certText = certificate === 'issued' ? '岗位徽章已授予，模拟实操复核通过。'
     : certificate === 'pending' ? '模拟实操达到通过分数，考核单等待导师复核。'
     : '完成独立装配和首件质检，参加模拟岗位实操考核。';
-  return `<div class="training-page" data-training-root>
+  return `<div class="container training-page" data-training-root>
     <header class="training-header">
       <div>
         <div class="training-kicker"><span></span>个人成长</div>
