@@ -7,7 +7,7 @@ const dist = join(project, 'dist', 'server');
 const safe = await readdir(join(project, 'assets'));
 const entries = [
   'index.html', 'app.js', 'state.js', 'config.js', 'cloud.js', 'styles.css',
-  'training.js', 'training.css', 'community.js', 'community.css',
+  'training.js', 'training.css', 'community.js', 'community.css', 'community-play.css', 'online-play.css',
   ...safe.filter(name => name.endsWith('.webp') || name === 'icon.png').map(name => 'assets/' + name),
 ];
 const mime = {

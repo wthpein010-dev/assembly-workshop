@@ -105,3 +105,51 @@ test('guided hints toggle per step and result metrics reflect scored actions and
   assert.equal(state.track.runs.memory.accuracy, 80);
   assert.equal(state.xp, 40);
 });
+
+test('moving a part validates its station, tool, target and orientation before it can snap', () => {
+  const state = fresh();
+  applyTraining(state, 'start', 'memory');
+  assert.equal(applyTraining(state, 'manipulate', 'memory', { kind: 'inspect', target: 'inspect' }, 0), true);
+  assert.equal(applyTraining(state, 'next', 'memory'), true);
+  const drop = (item, target, step = 1) => applyTraining(state, 'manipulate', 'memory', { kind: 'drop', item, target }, step);
+  assert.equal(drop('wire', 'slot-b'), false);
+  assert.equal(drop('dimm', 'invalid-slot'), false);
+  assert.equal(drop('dimm', 'slot-b', 0), false);
+  assert.equal(drop('dimm', 'slot-b'), true);
+  assert.equal(state.track.runs.memory.feedback, 'wrong');
+  assert.equal(applyTraining(state, 'retry', 'memory'), true);
+  assert.equal(applyTraining(state, 'rotate', 'memory', undefined, 1), true);
+  assert.equal(drop('dimm', 'slot-b'), true);
+  assert.equal(state.track.runs.memory.feedback, 'correct');
+  assert.deepEqual(state.track.runs.memory.placement, { kind: 'drop', item: 'dimm', target: 'slot-b' });
+  assert.equal(drop('dimm', 'slot-b'), false);
+  assert.equal(applyTraining(state, 'next', 'memory'), true);
+  assert.equal(state.track.runs.memory.orientation, 0);
+  assert.equal(applyTraining(state, 'manipulate', 'memory', { kind: 'inspect', target: 'seat' }, 2), false);
+  assert.equal(applyTraining(state, 'manipulate', 'memory', { kind: 'press', target: 'seat' }, 2), true);
+});
+
+test('workbench manipulations can finish assembly and classify a failed quality sample', () => {
+  const state = fresh();
+  finish(state, 'memory');
+  const assembly = [
+    { kind: 'drop', item: 'b16', target: 'manifest' },
+    { kind: 'inspect', target: 'verify-bench' },
+    { kind: 'drop', item: 'ssd', target: 'ssd-bay' },
+    { kind: 'press', target: 'run' },
+  ];
+  const quality = [
+    { kind: 'inspect', target: 'review-log' },
+    { kind: 'drop', item: 'log', target: 'evidence-tray' },
+    { kind: 'drop', item: 'hold-tag', target: 'a17' },
+  ];
+  for (const [mission, actions] of [['assembly', assembly], ['quality', quality]]) {
+    assert.equal(applyTraining(state, 'start', mission), true);
+    for (const [index, action] of actions.entries()) {
+      assert.equal(applyTraining(state, 'manipulate', mission, action, index), true);
+      assert.equal(applyTraining(state, 'next', mission), true);
+    }
+    assert.equal(state.track.runs[mission].best, 100);
+  }
+  assert.equal(applyTraining(state, 'start', 'fault'), true);
+});

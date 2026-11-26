@@ -5,28 +5,28 @@ const missions = [
     xp: 40, coins: 35, gain: 20, image: 'part-memory',
     steps: [
       {
-        title: '检查部件', situation: '本轮工单需要一根内存条。请在模拟托盘中找到它。',
+        title: '检查部件', situation: '在工位上点选内存条，核对本轮物料。',
         hint: '认准带金色触点和定位缺口的长条部件。',
-        options: [['inspect', '检查内存条'], ['inspect-cable', '检查连接线'], ['skip-inspect', '跳过部件检查']],
+        options: ['inspect', 'inspect-cable', 'skip-inspect'],
         answer: 'inspect', feedback: '内存条已核对。工单和托盘中的部件一致。',
       },
       {
-        title: '对齐缺口', situation: '把内存条放入与缺口相符的模拟槽位。',
-        hint: '让模块缺口与槽位标记处于同一侧。',
-        drop: true, error: '缺口未对齐',
-        options: [['reverse', '槽位 A · 标记偏左'], ['align', '槽位 B · 标记偏右']],
+        title: '对齐缺口', situation: '工单指定槽位 B。旋转内存条，让缺口朝右，再把它放入槽位。',
+        hint: '先转动内存条，再拖到槽位 B。也可以先选内存条，再点槽位。',
+        error: '缺口未对齐',
+        options: ['reverse', 'align'],
         answer: 'align', feedback: '模块缺口与槽位 B 的标记一致，可以继续。',
       },
       {
-        title: '压入内存', situation: '缺口已对齐。选择正确的模拟入位动作。',
-        hint: '观察两个状态指示，等待两侧都显示锁定。',
-        options: [['force', '只确认一侧锁定'], ['seat', '确认两侧锁定'], ['verify-first', '直接跳到自检']],
+        title: '压入内存', situation: '按住或点按内存条，把两侧卡扣一起锁定。',
+        hint: '点击内存条中央可同步确认两侧。',
+        options: ['force', 'seat', 'verify-first'],
         answer: 'seat', feedback: '两侧均显示锁定，模拟内存条已就位。',
       },
       {
-        title: '完成自检', situation: '装配已完成。工位仍显示「待检测」，接下来应该怎么做？',
+        title: '完成自检', situation: '在工位终端运行自检，确认系统识别内存。',
         hint: '运行模拟自检，看到系统确认识别模块。',
-        options: [['done', '直接提交工单'], ['change', '更换已入位的模块'], ['check', '运行模拟自检']],
+        options: ['done', 'change', 'check'],
         answer: 'check', feedback: '自检通过，系统已识别内存模块。',
       },
     ],
@@ -37,23 +37,23 @@ const missions = [
     xp: 80, coins: 45, gain: 25, requires: 'memory', image: 'station',
     steps: [
       {
-        title: '核对工单', situation: '工单指定 B16 模块。托盘里同时放着 B16、B08 和未贴标的部件。',
-        options: [['nearest', '取离自己最近的一件'], ['anonymous', '先用未贴标的部件'], ['order', '选用工单指定的 B16']],
+        title: '核对工单', situation: '把工单指定的 B16 模块拖到核对区。',
+        options: ['nearest', 'anonymous', 'order'],
         answer: 'order', feedback: '物料已核对。工单型号与部件一致。',
       },
       {
-        title: '确认工位', situation: '模拟台显示「未就绪」。工单要求备料后确认台面状态。',
-        options: [['assemble-anyway', '开始模拟安装'], ['verify-bench', '完成工位就绪核对'], ['edit-order', '把工单状态改为完成']],
+        title: '确认工位', situation: '检查工位就绪灯，再开始模拟装配。',
+        options: ['assemble-anyway', 'verify-bench', 'edit-order'],
         answer: 'verify-bench', feedback: '工位点检已完成，状态变为「可用」。',
       },
       {
-        title: '完成模拟入位', situation: '部件已进入模拟槽位。左侧显示锁定，右侧仍显示待确认。',
-        options: [['fit', '检查并确认右侧状态'], ['dispatch', '把部件交给下一站'], ['ignore-right', '记录两侧已经锁定']],
-        answer: 'fit', feedback: '模拟状态已确认，装配件可以进入测试。',
+        title: '装入固态硬盘', situation: '从托盘取出固态硬盘，装入机箱的硬盘托位。',
+        options: ['fit', 'dispatch', 'ignore-right'],
+        answer: 'fit', feedback: '硬盘已装入托位，装配件可以进入测试。',
       },
       {
-        title: '提交工位测试', situation: '工件准备就绪，测试记录暂时为空。',
-        options: [['verbal', '口头确认后离开'], ['run', '运行测试并写入记录'], ['stamp', '补填一条通过记录']],
+        title: '提交工位测试', situation: '按住或点按工位终端，生成本轮测试记录。',
+        options: ['verbal', 'run', 'stamp'],
         answer: 'run', feedback: '已生成测试记录并关联本轮工单。',
       },
     ],
@@ -61,21 +61,21 @@ const missions = [
   {
     id: 'quality', code: 'M-03', kind: '主线', title: '首件质量复核', area: '质检工位', skill: 'quality', training: '质检',
     detail: '核对检测记录，追踪证据，并作出首件放行判断。',
-    xp: 190, coins: 55, gain: 30, requires: 'assembly', image: 'results',
+    xp: 190, coins: 55, gain: 30, requires: 'assembly', image: 'quality-board',
     steps: [
       {
-        title: '确认检测记录', situation: 'A17 工件外观正常。记录中出现 A17 的单项自检未通过。',
-        options: [['look', '只检查工件外观'], ['review-log', '调取 A17 的自检记录'], ['assume', '按外观正常予以放行']],
+        title: '确认检测记录', situation: 'A17 外观正常。点击台面记录，查找自检异常。',
+        options: ['look', 'review-log', 'assume'],
         answer: 'review-log', feedback: '记录对应 A17，异常项目已定位。',
       },
       {
-        title: '保存证据', situation: '复核员需要能追溯到本件工单的原始记录。',
-        options: [['evidence', '关联工单、异常日志和复核结论'], ['replace', '只保留改写后的通过记录'], ['picture', '只留一张外观照片']],
+        title: '保存证据', situation: '将原始检测记录放入对应工件的证据夹。',
+        options: ['evidence', 'replace', 'picture'],
         answer: 'evidence', feedback: '工件、日志和复核记录已关联。',
       },
       {
-        title: '作出处置', situation: '复测仍出现同一异常。本件工单需要进入下一个处置状态。',
-        options: [['release', '允许工件进入下一站'], ['hide', '把日志从工单中移除'], ['hold', '暂缓放行并转交异常单']],
+        title: '作出处置', situation: 'A17 复测仍异常。给 A17 贴上对应的处置签。',
+        options: ['release', 'hide', 'hold'],
         answer: 'hold', feedback: '已记录暂缓放行并生成异常单。',
       },
     ],
@@ -83,21 +83,21 @@ const missions = [
   {
     id: 'fault', code: 'S-01', kind: '支线', title: '故障排查委托', area: '异常工位', skill: 'repair', training: '排障',
     detail: '通过模拟工位的比较试验，定位一条间歇异常的线索。',
-    xp: 150, coins: 50, gain: 25, requires: 'quality', image: 'retry',
+    xp: 150, coins: 50, gain: 25, requires: 'quality', image: 'station',
     steps: [
       {
-        title: '划定排查范围', situation: '试验批次中有一台工位反复报告同一模块异常。',
-        options: [['change-all', '同时更换模块和工位'], ['isolate', '将异常工件与其记录单独保留'], ['clear', '先删除告警记录']],
+        title: '划定排查范围', situation: '把反复告警的模块移到隔离托盘，保留排查线索。',
+        options: ['change-all', 'isolate', 'clear'],
         answer: 'isolate', feedback: '已保留待排查的工件和原始日志。',
       },
       {
-        title: '比较两轮记录', situation: '工位状态一致。替换为对照模块后异常消失，换回原模块后异常再次出现。',
-        options: [['blame-bench', '直接认定整条产线失效'], ['dismiss', '把重复异常归为巧合'], ['compare', '记录异常随原模块出现']],
+        title: '比较两轮记录', situation: '用对照模块替换检测槽内的原模块，观察告警变化。',
+        options: ['blame-bench', 'dismiss', 'compare'],
         answer: 'compare', feedback: '对照试验表明原模块需要进一步复核。',
       },
       {
-        title: '移交异常单', situation: '班组长需要现场复核。你手中有原始记录、试验条件和对照结果。',
-        options: [['escalate', '将证据连同异常单提交复核'], ['archive', '自行关闭异常单'], ['announce', '只报告「好像坏了」']],
+        title: '移交异常单', situation: '把原始记录和对照结果一起交给组长复核。',
+        options: ['escalate', 'archive', 'announce'],
         answer: 'escalate', feedback: '异常单和证据已交给班组长复核。',
       },
     ],
@@ -105,31 +105,87 @@ const missions = [
   {
     id: 'cert', code: 'R-01', kind: '考核', title: '岗位实操认证', area: '考核工位', skill: 'assembly', training: '装配',
     detail: '完成模拟岗位考核，提交导师复核，领取游戏内岗位徽章。',
-    xp: 240, coins: 80, gain: 15, requires: 'quality', image: 'results',
+    xp: 240, coins: 80, gain: 15, requires: 'quality', image: 'quality-board',
     steps: [
       {
-        title: '确认考核工单', situation: '岗位实操开始前，模拟工位需要记录本轮考核信息。',
-        options: [['skip', '跳过签入，直接开始'], ['sign-in', '核对工单并完成签入'], ['borrow-ticket', '使用上一轮的考核单']],
+        title: '确认考核工单', situation: '在本轮考核终端完成签入。',
+        options: ['skip', 'sign-in', 'borrow-ticket'],
         answer: 'sign-in', feedback: '本轮考核和训练档案已关联。',
       },
       {
-        title: '执行模拟装配', situation: '工位显示「物料待核对」。组员急着提交完成。',
-        options: [['follow-plan', '按工单顺序完成核对和模拟入位'], ['complete-now', '先点完成，稍后补核对'], ['copy', '引用上一轮的完成状态']],
+        title: '执行模拟装配', situation: '接入已核对的线缆，完成模拟装配。',
+        options: ['follow-plan', 'complete-now', 'copy'],
         answer: 'follow-plan', feedback: '模拟工位已确认每项装配状态。',
       },
       {
-        title: '提交检测结论', situation: '模拟自检提示有一项超出预设范围。',
-        options: [['forget', '等待系统清除提示'], ['treat-pass', '仍然填报通过'], ['report', '记录异常并标记待复核']],
+        title: '提交检测结论', situation: '自检发现一项超限。给对应项目单贴签。',
+        options: ['forget', 'treat-pass', 'report'],
         answer: 'report', feedback: '检测结论与工位记录一致。',
       },
       {
-        title: '完成岗位交接', situation: '班次即将结束。下一名组员需要接续处理待复核工单。',
-        options: [['close', '结束工单并离开模拟工位'], ['hand-off', '交接工单、异常记录和处理进度'], ['send-name', '只口头说明工件名称']],
+        title: '完成岗位交接', situation: '把完整的交接材料放入下一班接收夹。',
+        options: ['close', 'hand-off', 'send-name'],
         answer: 'hand-off', feedback: '交接记录已生成，可以提交导师复核。',
       },
     ],
   },
 ];
+
+const inspect = (points, scene) => ({ kind: 'inspect', points, scene });
+const press = (points) => ({ kind: 'press', points });
+const drop = (items, points, solution, settings = {}) => ({ kind: 'drop', items, points, solution, ...settings });
+
+// Points follow the locations of the props in their 16:9 scene.
+const workbenches = {
+  memory: [
+    inspect([['inspect', '内存条', 30, 66, 'part-memory'], ['inspect-cable', '连接线', 68, 71, 'part-cable']]),
+    drop([['dimm', '内存条', 'part-memory']], [['slot-a', '槽位 A · 缺口朝左', 62, 43], ['slot-b', '槽位 B · 缺口朝右', 28, 61]],
+      ['dimm', 'slot-b'], { turn: true }),
+    press([['force', '只压左卡扣', 62, 44], ['seat', '压入内存条', 28, 61, 'part-memory']]),
+    inspect([['check', '运行自检', 68, 35], ['done', '提交工单', 31, 73]]),
+  ],
+  assembly: [
+    drop([['b16', 'B16 模块', 'part-memory'], ['b08', 'B08 模块', 'part-memory']],
+      [['manifest', 'B16 工单 · 核对区', 58, 63]], ['b16', 'manifest']),
+    inspect([['verify-bench', '工位就绪灯', 64, 38], ['edit-order', '已完工标签', 36, 67]]),
+    drop([['ssd', '固态硬盘', 'part-ssd'], ['wire', '连接线', 'part-cable']],
+      [['ssd-bay', '机箱 · 硬盘托位', 76, 58], ['io-port', '主板 · 线缆接口', 28, 66]], ['ssd', 'ssd-bay']),
+    press([['run', '启动工位测试', 68, 39], ['stamp', '盖章提交', 36, 71]]),
+  ],
+  quality: [
+    inspect([['review-log', 'A17 · 自检失败', 65, 36], ['look', 'A17 · 外观正常', 30, 66]], 'quality-board'),
+    drop([['log', 'A17 原始日志'], ['photo', '外观照片']],
+      [['evidence-tray', 'A17 证据夹', 65, 56], ['other-tray', 'A18 证据夹', 30, 68]], ['log', 'evidence-tray'], { scene: 'quality-board' }),
+    drop([['pass-tag', '放行签', 'part-tag'], ['hold-tag', '异常签', 'part-tag']],
+      [['a17', '待处置工件 A17', 67, 59], ['a18', '对照工件 A18', 30, 68]], ['hold-tag', 'a17'], { scene: 'quality-board' }),
+  ],
+  fault: [
+    drop([['suspect', '异常模块', 'part-memory'], ['spare', '备件', 'part-memory']],
+      [['isolation', '隔离托盘', 29, 67], ['regular', '普通托盘', 71, 72]], ['suspect', 'isolation']),
+    drop([['control', '对照模块', 'part-memory'], ['suspect', '原异常模块', 'part-memory']],
+      [['probe', '检测槽 · 比对', 36, 57], ['storage', '备料托盘', 70, 71]], ['control', 'probe']),
+    drop([['case', '原始记录 + 对照结果'], ['verbal', '口头备注']],
+      [['lead', '组长复核夹', 63, 51], ['archive', '结案归档夹', 30, 74]], ['case', 'lead']),
+  ],
+  cert: [
+    inspect([['sign-in', '本轮考核终端', 67, 35], ['borrow-ticket', '旧考核单', 34, 66]]),
+    drop([['wire', '核对过的线缆', 'part-cable'], ['screw', '固定螺丝', 'part-screw']],
+      [['port', '主板线缆接口', 28, 65], ['bay', '机箱固定孔位', 76, 59]], ['wire', 'port']),
+    drop([['pass-tag', '通过签', 'part-tag'], ['hold-tag', '待复核签', 'part-tag']],
+      [['anomaly', '超限项目单', 63, 42], ['past', '上一轮记录', 33, 71]], ['hold-tag', 'anomaly'], { scene: 'quality-board' }),
+    drop([['handoff', '工单 + 记录 + 进度'], ['name', '工件名']],
+      [['next-shift', '下一班接收夹', 62, 48], ['archive', '归档夹', 32, 75]], ['handoff', 'next-shift']),
+  ],
+};
+
+function manipulationAnswer(play, step, motion, orientation) {
+  if (!motion || motion.kind !== play.kind || !play.points.some(([target]) => target === motion.target)) return null;
+  if (play.kind !== 'drop') return motion.item === undefined ? motion.target : null;
+  if (!play.items.some(([item]) => item === motion.item)) return null;
+  const [item, target] = play.solution;
+  return motion.item === item && motion.target === target && (!play.turn || orientation === 1)
+    ? step.answer : step.options.find((key) => key !== step.answer);
+}
 
 function missionById(id) {
   return missions.find((mission) => mission.id === id);
@@ -173,16 +229,26 @@ export function applyTraining(state, action, id, option, stepIndex) {
   if (state.track?.active !== id || run?.status !== 'active') return false;
   if (action === 'retry' && run.feedback === 'wrong') {
     run.feedback = null;
+    run.placement = null;
     return true;
   }
 
   const step = mission.steps[run.step];
+  const play = workbenches[id][run.step];
+  if (!step || !play) return false;
   if (action === 'hint' && step.hint && !run.feedback) {
     run.hint = !run.hint;
     return true;
   }
-  if (action === 'answer') {
-    if (stepIndex !== run.step || run.feedback || !step.options.some(([key]) => key === option)) return false;
+  if (action === 'rotate' && play.turn && !run.feedback && stepIndex === run.step) {
+    run.orientation = run.orientation === 1 ? 0 : 1;
+    return true;
+  }
+  if (action === 'answer' || action === 'manipulate') {
+    const motion = action === 'manipulate' ? option : null;
+    if (motion) option = manipulationAnswer(play, step, motion, run.orientation);
+    if (stepIndex !== run.step || run.feedback || !step.options.includes(option)) return false;
+    if (motion) run.placement = { kind: motion.kind, ...(motion.item ? { item: motion.item } : {}), target: motion.target };
     run.feedback = option === step.answer ? 'correct' : 'wrong';
     if (run.feedback === 'wrong') {
       run.mistakes += 1;
@@ -194,6 +260,8 @@ export function applyTraining(state, action, id, option, stepIndex) {
   if (action !== 'next' || run.feedback !== 'correct') return false;
   run.feedback = null;
   run.hint = false;
+  run.orientation = 0;
+  run.placement = null;
   run.step += 1;
   if (run.step < mission.steps.length) return true;
 
@@ -303,23 +371,70 @@ function stepList(mission, run) {
   }).join('')}</ol>`;
 }
 
+const playInstructions = {
+  inspect: '点击工位上的检测点',
+  press: '按住或点按工位部件',
+  drop: '拖放物料，或先选物料再点放置区',
+};
+
+function workbenchStreak(run) {
+  if (!run || run.misses[run.step]) return 0;
+  let streak = 0;
+  for (let index = run.step - (run.feedback === 'correct' ? 0 : 1); index >= 0 && !run.misses[index]; index--) {
+    streak++;
+  }
+  return streak;
+}
+
+function workbenchPart(asset, ctx) {
+  return asset ? `<img src="${ctx.asset(asset)}" alt="" draggable="false">`
+    : '<span class="training-prop-paper" aria-hidden="true"></span>';
+}
+
 function stageConsole(mission, step, run, ctx) {
-  const memory = mission.id === 'memory';
-  const canDrop = step.drop && run && !run.feedback;
-  const retryScene = step.drop && run?.feedback === 'wrong';
-  return `<div class="training-console" style="--training-scene:url('${ctx.asset(retryScene ? 'retry' : 'station')}')">
-    <div class="training-console-top">
-      <span>${memory ? '带教模式' : mission.area}</span>
-      <span><i></i>${run ? '模拟工位在线' : '待开始'}</span>
+  const index = run?.step ?? 0;
+  const play = workbenches[mission.id][index];
+  const active = !!run && !run.feedback;
+  const placed = play.items?.find(([item]) => item === run?.placement?.item);
+  const orientation = run?.orientation === 1 ? '右' : '左';
+  const mode = play.kind === 'drop' ? '拖放' : play.kind === 'press' ? '压合' : '检查';
+  const status = !run ? '待开始' : run.feedback === 'correct' ? '工序已确认'
+    : run.feedback === 'wrong' ? '需复核' : playInstructions[play.kind];
+  return `<div class="training-console" data-training-bench="${mission.id}" data-training-stage="${index}" data-training-play="${play.kind}">
+    <div class="training-scene" style="--training-scene:url('${ctx.asset(play.scene ?? 'station')}')">
+      <div class="training-console-top">
+        <span>${mission.id === 'memory' ? '带教模式' : mission.area} · ${mode}</span>
+        ${run ? `<span class="training-streak">连击 ×<b>${workbenchStreak(run)}</b></span>` : '<span><i></i>模拟工位</span>'}
+      </div>
+      ${run ? play.points.map(([point, label, x, y, asset]) => {
+        const result = run.placement?.target === point ? run.feedback : '';
+        const part = result === 'correct' && placed ? placed[2] : asset;
+        const socket = point.startsWith('slot-') || ['ssd-bay', 'io-port', 'probe', 'port'].includes(point);
+        return `<button type="button" class="training-point training-point--${play.kind}" data-training-point="${point}"
+          style="--point-x:${x}%;--point-y:${y}%"${result ? ` data-training-placement="${result}"` : ''}
+          ${active ? '' : 'disabled'}>
+          ${part || (result === 'correct' && placed) ? workbenchPart(part, ctx)
+            : socket ? '<span class="training-socket" aria-hidden="true"></span>' : ''}
+          <span><i aria-hidden="true">${result === 'correct' ? '✓' : result === 'wrong' ? '!' : play.kind === 'drop' ? '+' : '◎'}</i>${label}</span>
+        </button>`;
+      }).join('') : ''}
     </div>
-    ${memory && !retryScene ? `<div class="training-part${canDrop ? ' training-part--drag' : ''}">
-      <img src="${ctx.asset('part-memory')}" alt="模拟内存条" draggable="${canDrop ? 'true' : 'false'}"${canDrop ? ' data-training-drag' : ''}>
-      <span>${canDrop ? '模拟内存条 · 缺口偏右' : '本轮练习部件 · 内存条'}</span>
-    </div>` : ''}
     <div class="training-console-bottom">
       <span>${mission.code}　${step.title}</span>
-      ${canDrop ? '<span>拖到右侧槽位，或直接选择槽位</span>' : '<span>模拟操作</span>'}
+      <span data-training-guidance role="status">${status}</span>
     </div>
+    ${play.items && run ? `<div class="training-tray">
+      <span class="training-tray-label">物料托盘</span>
+      <div class="training-tray-items">
+        ${play.items.map(([item, label, asset]) => `<button type="button" class="training-tray-item" data-training-item="${item}"
+          ${play.turn ? `data-training-orientation="${orientation === '右' ? 'right' : 'left'}"` : ''}
+          data-training-item-label="${label}" aria-pressed="false" draggable="${active}"${active ? '' : ' disabled'}>
+          ${workbenchPart(asset, ctx)}
+          <span>${label}${play.turn ? ` <small>缺口朝${orientation}</small>` : ''}</span>
+        </button>`).join('')}
+      </div>
+      ${active && play.turn ? trainingButton('↻ 转动内存条', 'rotate', mission.id, { step: index, extraClass: 'training-rotate' }) : ''}
+    </div>` : ''}
   </div>`;
 }
 
@@ -352,11 +467,6 @@ function stationControls(mission, step, run) {
     <h2>${step.title}</h2>
     <p>${step.situation}</p>
     ${run.hint ? `<p class="training-hint" id="training-hint-text">${step.hint}</p>` : ''}
-    <div class="training-options" aria-label="${step.drop ? '可用模拟槽位' : '可用操作'}">
-      ${step.options.map(([option, label]) => trainingButton(label, 'answer', mission.id, {
-        option, step: run.step, extraClass: step.drop ? 'training-drop-target' : '',
-      })).join('')}
-    </div>
     ${step.hint ? trainingButton(run.hint ? '收起提示' : '查看提示', 'hint', mission.id, {
       expanded: !!run.hint, describedBy: run.hint ? 'training-hint-text' : '', extraClass: 'training-hint-toggle',
     }) : ''}
@@ -381,11 +491,12 @@ function stationResult(track, mission, run, ctx) {
     : '本轮成绩已记录。首通奖励已在此前领取。';
   return `<div class="training-result">
     <section class="training-result-cover${failed ? ' training-result-cover--failed' : ''}"
-      style="--training-scene:url('${ctx.asset(failed ? 'retry' : 'results')}')">
+      style="--training-scene:url('${ctx.asset(failed ? 'station' : 'quality-board')}')">
       <div>
         <div class="training-kicker"><span></span>训练结算</div>
         <h2>${failed ? '考核需重练' : pending ? '待导师复核' : '训练完成'}</h2>
         <p>${reward}</p>
+        ${failed || !run.mistakes ? '' : '<p class="training-replay-goal">再练时，试试全程无返工。</p>'}
         <dl class="training-metrics">
           <div><dt>正确率</dt><dd>${run.accuracy == null ? '—' : `${run.accuracy}%`}</dd></div>
           <div><dt>返工</dt><dd>${run.mistakes} 次</dd></div>
@@ -459,7 +570,7 @@ function recordPage(state, ctx) {
           <span>${label}</span>${progressBar(Math.min(state.skills[skill], 100), 100, `${label}熟练度`)}<strong>${state.skills[skill]}</strong>
         </div>`).join('')}
       </section>
-      <section class="training-cert" style="--training-scene:url('${ctx.asset('results')}')">
+      <section class="training-cert" style="--training-scene:url('${ctx.asset('quality-board')}')">
         <div class="training-kicker"><span></span>游戏内模拟认证</div>
         <h2>${certificate === 'issued' ? '岗位徽章已获得' : certificate === 'pending' ? '待导师复核' : '岗位实操认证'}</h2>
         <p>${certText}</p>
@@ -496,12 +607,99 @@ export function trainingPage(view, ctx) {
   return stationPage(state, ctx);
 }
 
+function bindWorkbench(page, ctx, focusAction) {
+  const bench = page.querySelector('[data-training-bench]');
+  if (!bench) return;
+  const { trainingBench: mission, trainingStage: stage, trainingPlay: kind } = bench.dataset;
+  const dragType = 'application/x-workshop-part';
+  const targets = bench.querySelectorAll('[data-training-point]:enabled');
+  const tray = [...bench.querySelectorAll('[data-training-item]:enabled')];
+  const guidance = bench.querySelector('[data-training-guidance]');
+  let selected = null;
+
+  function selectItem(item) {
+    selected = item;
+    for (const button of tray) button.setAttribute('aria-pressed', String(button === item));
+    bench.classList.toggle('training-has-item', !!item);
+    guidance.textContent = item ? `已选 ${item.dataset.trainingItemLabel} · 选择放置区` : playInstructions[kind];
+  }
+
+  function move(point, item, keyboard = false) {
+    if (!bench.isConnected) return;
+    const motion = { kind, target: point.dataset.trainingPoint };
+    if (item) motion.item = item.dataset.trainingItem;
+    let changed = false;
+    ctx.commit((state) => { changed = applyTraining(state, 'manipulate', mission, motion, Number(stage)); });
+    if (changed && keyboard) focusAction('.training-controls button');
+  }
+
+  for (const item of tray) {
+    item.addEventListener('click', (event) => {
+      selectItem(item === selected ? null : item);
+      if (selected && event.detail === 0) targets[0]?.focus({ preventScroll: true });
+    });
+    item.addEventListener('dragstart', (event) => {
+      event.dataTransfer.setData(dragType, [mission, stage, item.dataset.trainingItem].join('/'));
+      event.dataTransfer.effectAllowed = 'move';
+      selectItem(item);
+    });
+    item.addEventListener('dragend', () => {
+      selectItem(null);
+      for (const target of targets) target.classList.remove('training-drop-active');
+    });
+  }
+
+  for (const point of targets) {
+    point.addEventListener('click', (event) => {
+      if (kind === 'drop' && !selected) {
+        guidance.textContent = '先从物料托盘选一件物料';
+        if (event.detail === 0) tray[0]?.focus({ preventScroll: true });
+        return;
+      }
+      move(point, selected, event.detail === 0);
+    });
+    if (kind === 'drop') {
+      point.addEventListener('dragover', (event) => {
+        if (!Array.from(event.dataTransfer.types).includes(dragType)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        point.classList.add('training-drop-active');
+      });
+      point.addEventListener('dragleave', () => point.classList.remove('training-drop-active'));
+      point.addEventListener('drop', (event) => {
+        event.preventDefault();
+        point.classList.remove('training-drop-active');
+        const item = tray.find((button) => event.dataTransfer.getData(dragType) === [mission, stage, button.dataset.trainingItem].join('/'));
+        if (item) move(point, item);
+      });
+    }
+    if (kind === 'press') {
+      let timer;
+      const cancel = () => {
+        clearTimeout(timer);
+        point.classList.remove('training-point--holding');
+      };
+      point.addEventListener('pointerdown', (event) => {
+        if (!event.isPrimary || event.button !== 0) return;
+        point.classList.add('training-point--holding');
+        timer = setTimeout(() => move(point), 420);
+      });
+      for (const event of ['pointerup', 'pointercancel', 'pointerleave']) point.addEventListener(event, cancel);
+    }
+  }
+}
+
 export function bindTraining(root, view, ctx) {
   const page = root.matches('[data-training-root]') ? root : root.querySelector('[data-training-root]');
   if (!page) return;
-  const focusAction = (selector) => {
-    const target = page.ownerDocument.querySelector(`[data-training-root] ${selector}`);
-    target?.focus({ preventScroll: true });
+  const focusAction = (...selectors) => {
+    const current = page.ownerDocument.querySelector('[data-training-root]');
+    for (const selector of selectors) {
+      const target = current?.querySelector(selector);
+      if (!target) continue;
+      target.focus({ preventScroll: true });
+      break;
+    }
   };
   const select = (button, focus = true) => {
     const { trainingAction: action, trainingId: id, trainingOption: option, trainingStep: step } = button.dataset;
@@ -520,10 +718,10 @@ export function bindTraining(root, view, ctx) {
     if (action === 'review') {
       ctx.toast('模拟复核已通过，岗位徽章已发放');
       if (focus) focusAction('[data-training-action="missions"]');
-    } else if (focus && action === 'hint') {
-      focusAction('.training-hint-toggle');
+    } else if (focus && (action === 'hint' || action === 'rotate')) {
+      focusAction(action === 'hint' ? '.training-hint-toggle' : '.training-rotate');
     } else if (focus) {
-      focusAction('.training-controls button, .training-result-cover button');
+      focusAction('[data-training-item]:enabled', '[data-training-point]:enabled', '.training-controls button', '.training-result-cover button');
     }
   };
 
@@ -532,25 +730,5 @@ export function bindTraining(root, view, ctx) {
     if (button && !button.disabled) select(button, event.detail === 0);
   });
 
-  const dragPart = page.querySelector('[data-training-drag]');
-  if (!dragPart) return;
-  const dragType = 'application/x-workshop-part';
-  dragPart.addEventListener('dragstart', (event) => {
-    event.dataTransfer.setData(dragType, 'memory');
-    event.dataTransfer.effectAllowed = 'move';
-  });
-  for (const target of page.querySelectorAll('.training-drop-target')) {
-    target.addEventListener('dragover', (event) => {
-      if (!Array.from(event.dataTransfer.types).includes(dragType)) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-      target.classList.add('training-drop-active');
-    });
-    target.addEventListener('dragleave', () => target.classList.remove('training-drop-active'));
-    target.addEventListener('drop', (event) => {
-      event.preventDefault();
-      target.classList.remove('training-drop-active');
-      if (event.dataTransfer.getData(dragType) === 'memory') select(target, false);
-    });
-  }
+  bindWorkbench(page, ctx, focusAction);
 }

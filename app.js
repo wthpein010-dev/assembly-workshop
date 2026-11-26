@@ -10,7 +10,11 @@ const communityViews = new Set(['social', 'team', 'help', 'shop', 'honor', 'even
 const viewNames = { hall: '任务大厅', world: '工坊地图', missions: '任务手册', station: '模拟工位', record: '技能记录', social: '班组交流', team: '组队训练', help: '求助板', shop: '工坊商店', honor: '我的工位', event: '工坊建设周', online: '联机大厅', account: '角色与存档', create: '创建角色', start: '装配工坊' };
 const cloudStatus = { local: '本地存档', connecting: '连接中', ready: '云档已同步', saving: '正在同步', conflict: '待处理云档', offline: '云档暂未连接' };
 const roles = [ '身份绑定', '定制角色', '角色取名' ];
-const coopSteps = ['提交装配检查单', '完成首件质检', '确认交接并归档'];
+const coopSteps = [
+  { label: '提交装配检查单', piece: '装配记录单', target: '质检托盘' },
+  { label: '完成首件质检', piece: '首件合格标签', target: '复核区' },
+  { label: '确认交接并归档', piece: '复核工单', target: '归档槽' },
+];
 let state = loadSave(localStorage);
 let view = '';
 let toastTimer;
@@ -20,6 +24,7 @@ let worldTimer;
 let world = null;
 let worldError = '';
 let worldRequest = false;
+let selectedHandoff = '';
 
 
 const asset = id => './assets/' + id + '.webp';
@@ -210,7 +215,7 @@ function hallPage() {
       <div class="milestones">${taskSummaries()}</div>
     </section>
     <section class="bay-links" aria-label="车间活动">
-      ${[['online','联机大厅','聊天、邀请其他玩家一起质检','yard'],['help','工友求助','发布卡点或协助他人','station'],['event','建设周','解锁班组荣誉与纪念工装','season']].map(([route,label,body,img]) =>
+      ${[['online','联机大厅','聊天、邀请其他玩家一起质检','yard'],['help','工友求助','发布卡点或协助他人','station'],['event','建设周','解锁班组荣誉与纪念工装','season-scene']].map(([route,label,body,img]) =>
         `<a href="#${route}" class="bay-link" style="--bay-image:url('${asset(img)}')"><strong>${label}</strong><span>${body}</span></a>`).join('')}
     </section>
   </div>`;
@@ -283,16 +288,54 @@ function actionButton(label, action, target = '', primary = false) {
   return `<button type="button" class="btn ${primary ? 'btn-primary' : 'btn-secondary'}" data-world="${action}" data-target="${esc(target)}">${label}</button>`;
 }
 
+function turnKey(room = world?.room) {
+  return room?.step < coopSteps.length && room.actor === cloud.meta()?.id
+    ? room.id + '/' + room.step : '';
+}
+
+function liveBench(room) {
+  const key = turnKey(room);
+  if (!key) return '<span class="status-chip">等待队友操作</span>';
+  const stage = coopSteps[room.step];
+  return `<div class="live-bench">
+    <p class="live-bench-instruction">把「${stage.piece}」放到「${stage.target}」。也可点选后再点目标。</p>
+    <button type="button" class="live-piece" data-live-piece draggable="true" aria-pressed="false">
+      <img src="${asset('part-tag')}" alt="" draggable="false"><strong>${stage.piece}</strong>
+    </button>
+    <button type="button" class="live-drop" data-live-drop><span aria-hidden="true">◎</span><strong>${stage.target}</strong><small>放置区</small></button>
+  </div>`;
+}
+
+function selectHandoff(value) {
+  selectedHandoff = value;
+  document.querySelector('[data-live-piece]')?.setAttribute('aria-pressed', String(!!value));
+}
+
+async function placeHandoff() {
+  const key = turnKey();
+  if (!key || selectedHandoff !== key) {
+    toast('先选中左侧物件，再放到目标区。');
+    return;
+  }
+  if (await refreshWorld('step', { target: key })) {
+    selectHandoff('');
+    toast('本步已交接。');
+    document.querySelector('[data-world="reward"], [data-world="leave"]')?.focus();
+  }
+}
+
 function drawWorld() {
   const panel = document.querySelector('#live-room');
   const feed = document.querySelector('#live-feed');
   if (!panel || !feed) return;
   const me = cloud.meta()?.id;
   if (worldError) {
+    delete panel.dataset.markup;
     panel.innerHTML = `<h2>暂时无法连接</h2><p class="field-hint">${esc(worldError)}</p>${actionButton('重试', 'retry')}`;
     return;
   }
   if (!world) {
+    delete panel.dataset.markup;
     panel.innerHTML = '<h2>在线工友</h2><p>正在连接联机大厅…</p>';
     return;
   }
@@ -300,16 +343,25 @@ function drawWorld() {
   const room = world.room;
   const people = (world.players || []).filter(player => player.id !== me);
   const team = room ? `<h2>双人质检</h2><p>${room.players.map(p => esc(p.name)).join(' / ')}</p>
-    <ol class="live-steps">${coopSteps.map((label, n) => `<li class="${n < room.step ? 'done' : n === room.step ? 'active' : ''}">${label}</li>`).join('')}</ol>
-    <div class="btn-row">${room.step >= 3 ? actionButton('领取协作奖励', 'reward', room.id, true) : room.actor === me ? actionButton(coopSteps[room.step], 'step', '', true) : '<span class="status-chip">等待队友操作</span>'}
+    <ol class="live-steps">${coopSteps.map(({ label }, n) => `<li class="${n < room.step ? 'done' : n === room.step ? 'active' : ''}">${label}</li>`).join('')}</ol>
+    ${room.step < 3 ? liveBench(room) : ''}
+    <div class="btn-row">${room.step >= 3 ? actionButton('领取协作奖励', 'reward', room.id, true) : ''}
     ${actionButton('离开工位', 'leave')}</div>`
     : `<h2>在线工友</h2>${people.length ? people.map(p => `<div class="person-row"><b>${esc(p.name)}</b>${actionButton('邀请质检', 'invite', p.id)}</div>`).join('') : '<p>其他玩家上线后会出现在这里。</p>'}`;
   if (!panel.contains(document.activeElement) || !worldRequest) {
     const focus = document.activeElement?.dataset.world;
     const target = document.activeElement?.dataset.target;
     const html = invites + team;
-    if (panel.innerHTML !== html) {
+    const focusedPiece = document.activeElement?.matches('[data-live-piece]');
+    const focusedDrop = document.activeElement?.matches('[data-live-drop]');
+    if (panel.dataset.markup !== html) {
+      panel.dataset.markup = html;
       panel.innerHTML = html;
+      if (selectedHandoff && selectedHandoff === turnKey()) {
+        panel.querySelector('[data-live-piece]')?.setAttribute('aria-pressed', 'true');
+      }
+      if (focusedPiece) panel.querySelector('[data-live-piece]')?.focus();
+      if (focusedDrop) panel.querySelector('[data-live-drop]')?.focus();
       if (focus) [...panel.querySelectorAll('[data-world]')].find(b => b.dataset.world === focus && b.dataset.target === target)?.focus();
     }
   }
@@ -391,6 +443,13 @@ app.addEventListener('click', async event => {
     app.querySelector('[data-choice="' + key + '"][data-value="' + choice.dataset.value + '"]')?.focus();
     return;
   }
+  if (event.target.closest('[data-live-piece]')) {
+    const key = turnKey();
+    selectHandoff(selectedHandoff === key ? '' : key);
+    if (selectedHandoff) document.querySelector('[data-live-drop]')?.focus();
+    return;
+  }
+  if (event.target.closest('[data-live-drop]')) { await placeHandoff(); return; }
   const worldButton = event.target.closest('[data-world]');
   if (worldButton) {
     const action = worldButton.dataset.world;
@@ -432,6 +491,35 @@ app.addEventListener('click', async event => {
   if (action === 'sync-now') await (cloud.status() === 'offline' ? cloud.resume() : cloud.flush());
   if (action === 'use-cloud') { cloud.useRemote(); render(); toast('已读取云端存档。'); }
   if (action === 'local-mode') { cloud.goLocal(); render(); toast('本地进度已保留。'); }
+});
+
+app.addEventListener('dragstart', event => {
+  if (!event.target.closest('[data-live-piece]') || !event.dataTransfer) return;
+  const key = turnKey();
+  if (!key) { event.preventDefault(); return; }
+  selectHandoff(key);
+  event.dataTransfer.setData('text/plain', key);
+  event.dataTransfer.effectAllowed = 'move';
+});
+function hoverHandoff(event) {
+  const zone = event.target.closest('[data-live-drop]');
+  if (!zone || !turnKey() || selectedHandoff !== turnKey()) return;
+  event.preventDefault();
+  zone.classList.add('drop-over');
+}
+app.addEventListener('dragenter', hoverHandoff);
+app.addEventListener('dragover', hoverHandoff);
+app.addEventListener('dragleave', event => {
+  const zone = event.target.closest('[data-live-drop]');
+  if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove('drop-over');
+});
+app.addEventListener('dragend', () => document.querySelector('[data-live-drop]')?.classList.remove('drop-over'));
+app.addEventListener('drop', async event => {
+  const zone = event.target.closest('[data-live-drop]');
+  if (!zone) return;
+  event.preventDefault();
+  zone.classList.remove('drop-over');
+  if (event.dataTransfer?.getData('text/plain') === turnKey()) await placeHandoff();
 });
 
 app.addEventListener('input', event => {

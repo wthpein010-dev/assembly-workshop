@@ -195,6 +195,7 @@ async function actInWorld(db, world, account, { action, target, text }) {
     assertApi(room, 409, '请先加入小队');
     if (room.step >= 3) return false;
     assertApi(room.players[room.step % 2].id === account.id, 409, '请等待队友完成本步交接');
+    assertApi(target === room.id + '/' + room.step, 409, '工位进度已变化，请确认当前步骤。');
     room.step += 1;
     return true;
   }

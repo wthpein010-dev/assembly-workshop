@@ -23,29 +23,36 @@ const items = {
   handoff: { name: '交接能手', icon: '◇', type: '个人称号', note: '完成一次传动泵班组交接。' },
   season: { name: '工坊同行者', icon: '❖', type: '个人称号', note: '带着班组一起达成本期目标。' },
 };
+const handoffTools = {
+  screw: { name: '定位螺钉', code: 'M4', asset: 'part-screw' },
+  gauge: { name: '间隙规片', code: '0.15 mm' },
+  record: { name: '交接记录卡', code: 'LOG', asset: 'part-tag' },
+  isolation: { name: '停机挂牌', code: 'STOP' },
+  cable: { name: '复验连接线', code: 'TEST', asset: 'part-cable' },
+};
 const roles = {
   assembly: { name: '装配员', steps: [
-    { prompt: '泵壳定位线偏左，紧固件尚未上紧。你先做什么？', correct: 'align', choices: { torque: '先拧紧紧固件', align: '对齐定位线' }, note: '先按定位线调整泵壳，再做紧固。' },
-    { prompt: '定位已复核，两处紧固点仍待确认。如何交接？', correct: 'torque', choices: { torque: '按工单要求复核并记录扭矩', release: '口头说明后放行' }, note: '把复核结果写进交接记录。' },
+    { label: '定位备料', slot: 'M4 定位件槽', item: 'screw', prompt: '泵壳定位线偏左。领好定位件后，先检查哪一步？', correct: 'align', choices: { torque: '先拧紧紧固件', align: '核对并对齐定位线' }, note: '先按定位线调整泵壳，再做紧固。' },
+    { label: '扭矩签交', slot: '扭矩记录夹', item: 'record', prompt: '定位已复核，仍有两处紧固点待确认。如何交接？', correct: 'torque', choices: { torque: '复核并记录扭矩', release: '口头说明后放行' }, note: '把复核结果写进交接记录。' },
   ] },
   quality: { name: '质检员', steps: [
-    { prompt: '交接只附了外观照片，关键间隙缺少实测值。你先做什么？', correct: 'measure', choices: { record: '填写放行记录', measure: '测量并复核间隙' }, note: '先获得实测间隙，再填写记录。' },
-    { prompt: '复测后数值符合工单要求。如何交给下一岗？', correct: 'record', choices: { mark: '只标记外观合格', record: '记录两次读数并签交' }, note: '两次读数都要写进交接记录。' },
+    { label: '首件复测', slot: '0.15 mm 量具槽', item: 'gauge', prompt: '交接只附了外观照片，关键间隙缺少实测值。你先做什么？', correct: 'measure', choices: { record: '填写放行记录', measure: '测量并复核间隙' }, note: '先获得实测间隙，再填写记录。' },
+    { label: '读数签交', slot: '读数记录夹', item: 'record', prompt: '复测数值符合工单要求。如何交给下一岗？', correct: 'record', choices: { mark: '只标记外观合格', record: '记录两次读数并签交' }, note: '两次读数都要写进交接记录。' },
   ] },
   repair: { name: '维修员', steps: [
-    { prompt: '工位已停机挂牌，试运转记录里有轴承异响。你先做什么？', correct: 'inspect', choices: { reset: '立即复位试运转', inspect: '确认隔离后检查轴承' }, note: '先确认隔离，再排查异常位置。' },
-    { prompt: '工件检查完毕。如何完成维修交接？', correct: 'verify', choices: { verify: '记录维修结果并安排复验', release: '清空异常记录后放行' }, note: '保留异常和处理记录，再交给复验岗。' },
+    { label: '停机排查', slot: '停机状态挂牌位', item: 'isolation', prompt: '交班记录里有轴承异响。核对停机牌后，你先做什么？', correct: 'inspect', choices: { reset: '立即复位试运转', inspect: '确认隔离后检查轴承' }, note: '先确认隔离，再排查异常位置。' },
+    { label: '恢复复验', slot: '复验线托盘', item: 'cable', prompt: '工件检查完毕，准备把复验线交给下一岗。如何交接？', correct: 'verify', choices: { verify: '记录维修结果并安排复验', release: '清空异常记录后放行' }, note: '保留异常和处理记录，再交给复验岗。' },
   ] },
 };
 const visibility = { public: '工坊大厅', team: '仅班组', mentor: '仅导师' };
 const stages = { open: '待认领', claimed: '处理中', resolved: '已解决' };
 const routes = {
-  social: ['工友与频道', '加入频道聊天，和演示工友组队。', 'social'],
-  team: ['班组协作', '传动泵工单 · 完成岗位检查后交给下一班。', 'team'],
-  help: ['工坊求助板', '记录异常、认领工单，把处理结果留给下一班。', 'help-board'],
-  shop: ['积分兑换站', '用工坊积分换纪念物，也可以给工友送礼。', 'shop'],
-  honor: ['个人荣誉', '把获得的荣誉佩戴在工坊名片上。', 'honor'],
-  event: ['赛季工坊计划', '和演示班组一起完成本期交接改进目标。', 'season'],
+  social: ['工友与频道', '加入频道聊天，和演示工友组队。', 'cover'],
+  team: ['班组协作', '传动泵工单 · 完成岗位检查后交给下一班。', 'station'],
+  help: ['工坊求助板', '记录异常、认领工单，把处理结果留给下一班。', 'quality-board'],
+  shop: ['积分兑换站', '用工坊积分换纪念物，也可以给工友送礼。', 'yard'],
+  honor: ['个人荣誉', '把获得的荣誉佩戴在工坊名片上。', 'cover'],
+  event: ['赛季工坊计划', '和演示班组一起完成本期交接改进目标。', 'season-scene'],
 };
 const seasonBase = 3;
 const seasonGoal = 8;
@@ -53,7 +60,7 @@ const seasonGoal = 8;
 function newCommunity() {
   return {
     channel: 'floor', friendChat: null, friends: [], messages: {},
-    team: null, teamWins: [], ticketNumber: 0, ticketFilter: 'all', editing: null,
+    team: null, teamWins: [], teamBest: {}, ticketNumber: 0, ticketFilter: 'all', editing: null,
     tickets: [
       { id: 'bearing', by: 'lin', title: '传动轴承异响', text: '试转记录里出现了周期性异响。工件已停机挂牌，待排查原因并记录复测。', visibility: 'public', stage: 'open' },
       { id: 'bracket', by: 'qiao', title: '支架复测单缺读数', text: '第二次复测已完成，原工单还少一个间隙读数。请核对后补齐记录。', visibility: 'team', stage: 'open' },
@@ -67,6 +74,7 @@ function newCommunity() {
 const named = (collection, id) => Object.hasOwn(collection, id) ? collection[id] : null;
 const success = (message = '') => ({ ok: true, message });
 const failure = (message) => ({ ok: false, message });
+const handoffScore = (team) => Math.max(0, 100 - 12 * (team.misses ?? 0));
 const clean = (value, limit) => typeof value === 'string' ? value.trim().slice(0, limit) : '';
 const teammate = (id) => named(contacts, id)?.name ?? '演示工友';
 const grant = (c, id) => { if (!c.owned.includes(id)) c.owned.push(id); };
@@ -84,7 +92,7 @@ export function communityTitle(state) {
 export function updateCommunity(state, action, value) {
   const c = state.community ?? newCommunity();
   const result = applyAction(state, c, action, value);
-  if (result.ok) state.community = c;
+  if (result.ok || result.changed) state.community = c;
   return result;
 }
 
@@ -138,14 +146,40 @@ function applyAction(state, c, action, value) {
       if (c.team?.stage !== 'ready') return failure('双方就绪后再开始交接。');
       c.team.stage = 'active';
       return success();
+    case 'challenge-team':
+      if (c.team?.stage !== 'active') c.team = { mate: 'qiao', role: 'quality', stage: 'ready', step: 0 };
+      return success();
+    case 'team-replay':
+      if (c.team?.stage !== 'complete') return failure('交接结束后可重玩。');
+      c.team = { mate: c.team.mate, role: c.team.role, stage: 'ready', step: 0 };
+      return success();
+    case 'team-place':
     case 'team-step': {
-      if (c.team?.stage !== 'active') return failure('先开始交接。');
-      const { role, step } = c.team;
-      const current = roles[role].steps[step];
-      if (value !== current.correct) return failure(current.note);
-      c.team.step += 1;
-      if (c.team.step < roles[role].steps.length) return success('工友已核对。继续下一项。');
-      c.team.stage = 'complete';
+      const team = c.team;
+      if (team?.stage !== 'active' || value?.step !== team.step) return failure('这道检查已经切换。');
+      const current = roles[team.role].steps[team.step];
+      const miss = (message) => {
+        team.misses = (team.misses ?? 0) + 1;
+        team.feedback = { kind: 'error', message, delta: '−12' };
+        return { ok: false, changed: true, message };
+      };
+      if (action === 'team-place') {
+        if (team.placed === current.item) return failure('这道检查的物品已入槽。');
+        if (value.item !== current.item) return miss('与接收槽不符。请核对工单和工具托盘。');
+        team.placed = current.item;
+        team.feedback = { kind: 'success', message: handoffTools[current.item].name + '已入槽，请确认岗位检查。' };
+        return success();
+      }
+      if (team.placed !== current.item) return failure('先将对应物品放进接收槽。');
+      if (value.choice !== current.correct) return miss(current.note);
+      team.step += 1;
+      team.placed = null;
+      team.feedback = { kind: 'success', message: teammate(team.mate) + '已核对' + current.label + '。' };
+      if (team.step < roles[team.role].steps.length) return success();
+      team.stage = 'complete';
+      c.teamBest ??= {};
+      const role = team.role;
+      c.teamBest[role] = Math.max(c.teamBest[role] ?? 0, handoffScore(team));
       if (c.teamWins.includes(role)) return success('交接通过。该岗位的首次奖励已领取。');
       c.teamWins.push(role);
       c.contribution += 2;
@@ -303,9 +337,45 @@ function socialPage(c, e) {
     </div>`;
 }
 
-function teamPage(c) {
+function handoffTool(id, ctx) {
+  const tool = handoffTools[id];
+  return `<span class="co-tool-image" data-tool="${id}" aria-hidden="true">${tool.asset ? `<img src="${ctx.escape(ctx.asset(tool.asset))}" alt="" draggable="false">` : `<b>${tool.code}</b>`}</span><strong>${tool.name}</strong>`;
+}
+
+function activeHandoff(team, ctx) {
+  const role = roles[team.role];
+  const current = role.steps[team.step];
+  const placed = team.placed === current.item;
+  const feedback = team.feedback;
+  return `<section class="co-play" data-co-stage="${team.step}" style="--co-play-bg: url('${ctx.escape(ctx.asset('station'))}')" aria-labelledby="co-title-page">
+    <header class="co-play-top">
+      <div><p>传动泵 · 交接工单</p><h1 id="co-title-page">${role.name}交接台</h1></div>
+      <dl class="co-play-metrics"><div><dt>演示搭档</dt><dd>${teammate(team.mate)}</dd></div><div><dt>当前分数</dt><dd data-co-score>${handoffScore(team)}<small> / 100</small></dd></div></dl>
+    </header>
+    <ol class="co-play-stages" aria-label="岗位检查进度">${role.steps.map((stage, i) => `<li ${i === team.step ? 'aria-current="step"' : ''} data-done="${i < team.step}"><span>${i < team.step ? '✓' : i + 1}</span>${stage.label}</li>`).join('')}</ol>
+    <div class="co-play-body">
+      <section class="co-play-tray" aria-labelledby="co-tray-title">
+        <div><h2 id="co-tray-title">工具托盘</h2><p id="co-play-instructions">拖入接收槽，或先点选物品，再点接收槽。</p></div>
+        <div class="co-play-pieces">${Object.keys(handoffTools).map((id) => `<button class="co-play-piece" type="button" draggable="${!placed}" data-co-piece="${id}" aria-pressed="false"${placed ? ' disabled' : ''}>${handoffTool(id, ctx)}</button>`).join('')}</div>
+      </section>
+      <section class="co-play-station" aria-labelledby="co-drop-title">
+        <div><h2 id="co-drop-title">${current.label}</h2><p>${current.prompt}</p></div>
+        <button type="button" class="co-play-drop" data-co-drop data-placed="${placed}" aria-describedby="co-play-instructions"${placed ? ' disabled' : ''}>
+          ${placed ? `${handoffTool(current.item, ctx)}<small>已入槽 · ${current.slot}</small>` : `<span aria-hidden="true" class="co-drop-target">+</span><strong>${current.slot}</strong><small>等待放入物品</small>`}
+        </button>
+        <div class="co-play-confirm" aria-label="岗位确认">
+          <p>${placed ? '选择确认动作，签交当前检查。' : '物品入槽后可确认岗位检查。'}</p>
+          <div class="co-toolbar">${Object.entries(current.choices).map(([id, label]) => button('team-step', id, label, { disabled: !placed })).join('')}</div>
+        </div>
+      </section>
+    </div>
+    <p class="co-play-feedback" data-co-feedback data-kind="${feedback?.kind === 'error' ? 'error' : 'success'}" role="status">${feedback ? `${feedback.delta ? `<b>${ctx.escape(feedback.delta)} 分</b>` : '<b>✓</b>'} ${ctx.escape(feedback.message)}` : '误放或误确认每次扣 12 分，可重试当前检查。'}</p>
+  </section>`;
+}
+
+function teamPage(c, state, e, ctx) {
   const team = c.team;
-  const current = team?.stage === 'active' ? roles[team.role].steps[team.step] : null;
+  if (team?.stage === 'active') return activeHandoff(team, ctx);
   const stage = { invited: '等待你就绪', ready: '双方就绪', active: '交接中', complete: '交接完成' };
   return `
     <div class="co-columns">
@@ -319,13 +389,9 @@ function teamPage(c) {
           ${['invited', 'ready'].includes(team.stage) ? `
             <h3>选择岗位</h3><div class="co-tabs" aria-label="岗位">${Object.entries(roles).map(([id, role]) => button('choose-role', id, role.name, { pressed: team.role === id })).join('')}</div>
             <div class="co-toolbar">${team.stage === 'invited' ? button('ready', null, '我已就绪', { primary: true }) : button('start-team', null, '开始交接', { primary: true })}</div>` : ''}
-          ${current ? `
-            <div class="co-work-order">
-              <p class="co-kicker">岗位检查 · ${team.step + 1} / ${roles[team.role].steps.length}</p>
-              <h3>${current.prompt}</h3>
-              <div class="co-toolbar" aria-label="交接选项">${Object.entries(current.choices).map(([id, label]) => button('team-step', id, label)).join('')}</div>
-            </div>` : ''}
-          ${team.stage === 'complete' ? `<p>工单已签交。可换一个岗位演练，或查看荣誉和赛季进度。</p><div class="co-toolbar">${link('honor', '查看荣誉')}${link('event', '查看赛季')}</div>` : ''}`}
+          ${team.stage === 'complete' ? `
+            ${c.teamBest?.[team.role] === undefined ? '<p>工单已签交。</p>' : `<dl class="co-play-metrics co-play-result" data-co-result tabindex="-1"><div><dt>本次交接</dt><dd>${handoffScore(team)}<small> / 100</small></dd></div><div><dt>重试次数</dt><dd>${team.misses ?? 0}</dd></div><div><dt>本岗最高分</dt><dd>${c.teamBest[team.role]}</dd></div></dl>`}
+            <div class="co-toolbar">${button('team-replay', null, '重玩本岗位', { primary: true })}${link('honor', '查看荣誉')}${link('event', '查看赛季')}</div>` : ''}`}
       </section>
       <section class="co-panel">
         <div class="co-row"><h2>邀请工友</h2>${link('online', '真人联机')}</div>
@@ -434,16 +500,22 @@ function honorPage(c) {
 
 function eventPage(c) {
   const progress = Math.min(seasonBase + c.contribution, seasonGoal);
+  const buildStages = [[3, '备料入场'], [6, '工位试运行'], [8, '联合验收']];
+  const challengePlaying = c.team?.stage === 'active';
   return `<div class="co-columns">
     <section class="co-panel">
       <div class="co-row"><h2>传动泵联合改进</h2><span class="co-tag">${c.seasonClaimed ? '奖励已领取' : progress === seasonGoal ? '达成目标' : '本期进行中'}</span></div>
       <div class="co-season"><p><strong>${progress}</strong> / ${seasonGoal} 份贡献</p><progress value="${progress}" max="${seasonGoal}" aria-label="赛季联合目标">${progress} / ${seasonGoal}</progress></div>
+      <ol class="co-build" aria-label="建设里程碑">${buildStages.map(([goal, label]) => `<li data-ready="${progress >= goal}"><span aria-hidden="true">${progress >= goal ? '✓' : '◇'}</span><strong>${label}</strong><small>${progress >= goal ? '已完成' : '累计 ' + goal + ' 份贡献开启'}</small></li>`).join('')}</ol>
       <div class="co-partners"><div><small>演示班组贡献</small><strong>${seasonBase}</strong></div><div><small>你的贡献</small><strong>${c.contribution}</strong></div></div>
       <p>达成奖励 · 80 积分和「工坊同行者」称号</p>
       ${button('season-reward', null, c.seasonClaimed ? '奖励已领取' : '领取赛季奖励', { primary: true, disabled: progress < seasonGoal || c.seasonClaimed })}
     </section>
     <section class="co-panel">
-      <h2>贡献途径</h2>
+      <h2>本期挑战 · 首件复测交接</h2>
+      <p>跟小乔核对间隙和交接记录。首次完成质检岗交接贡献 2 份，可重玩冲击最高分。</p>
+      ${button('challenge-team', null, challengePlaying ? '继续当前交接' : '接受交接挑战', { primary: true })}
+      <h3>其他贡献途径</h3>
       <div class="co-goals">
         <div><span>完成某岗位的首次交接 · +2</span>${link('team', '班组协作')}</div>
         <div><span>记录处理结果并解决工单 · +1</span>${link('help', '工坊求助')}</div>
@@ -468,13 +540,14 @@ export function communityPage(view, ctx) {
   const [title, description, art] = route;
   const state = ctx.state();
   const c = state.community ?? newCommunity();
+  const activeTeam = view === 'team' && c.team?.stage === 'active';
   return `<section class="community" aria-labelledby="co-title-page">
-    <header class="co-hero">
+    ${activeTeam ? '' : `<header class="co-hero">
       <div class="co-hero-art" aria-hidden="true" style="--co-art: url('${ctx.escape(ctx.asset(art))}')"></div>
       <div class="co-heading"><h1 id="co-title-page">${title}</h1><p>${description}</p></div>
-    </header>
+    </header>`}
     <nav class="co-nav" aria-label="工坊社区">${Object.entries(routes).map(([id, [label]]) => `<a href="#${id}" data-co-go="${id}"${view === id ? ' aria-current="page"' : ''}>${label}</a>`).join('')}</nav>
-    ${pageBodies[view](c, state, ctx.escape)}
+    ${pageBodies[view](c, state, ctx.escape, ctx)}
   </section>`;
 }
 
@@ -489,26 +562,70 @@ const formActions = {
 export function bindCommunity(root, view, ctx) {
   const main = root.matches('.community') ? root : root.querySelector('.community');
   if (!main || !named(routes, view)) return;
+  const play = main.querySelector('[data-co-stage]');
+  const drop = play?.querySelector('[data-co-drop]');
+  const pieces = play?.querySelectorAll('[data-co-piece]');
+  const stage = Number(play?.dataset.coStage);
+  let selected = null;
+  let dragging = false;
 
   function run(action, value, source) {
     const state = ctx.state();
     const next = { community: structuredClone(state.community), coins: state.coins, xp: state.xp };
     const result = updateCommunity(next, action, value);
-    if (result.ok) {
+    if (result.ok || result.changed) {
       ctx.commit((state) => Object.assign(state, next));
-      if (action === 'invite' && view === 'social') ctx.go('team');
+      if ((action === 'invite' && view === 'social') || action === 'challenge-team') ctx.go('team');
       else if (action === 'honor-tab' && view === 'shop') ctx.go('honor');
       else {
         const current = root.ownerDocument.querySelector('.community');
         const target = source.id ? root.ownerDocument.getElementById(source.id)
           : [...(current?.querySelectorAll('[data-co-action]') ?? [])].find((node) => node.dataset.coAction === action && node.dataset.coValue === value && !node.disabled);
         if (action === 'edit-ticket') current?.querySelector('#co-title')?.focus();
-        else if (action === 'ready') current?.querySelector('[data-co-action="start-team"]')?.focus();
-        else if (action === 'start-team' || action === 'team-step') current?.querySelector('[data-co-action="team-step"]')?.focus();
+        else if (action === 'ready' || action === 'team-replay') current?.querySelector('[data-co-action="start-team"]')?.focus();
+        else if (action === 'team-place' && result.ok) current?.querySelector('[data-co-action="team-step"]')?.focus();
+        else if (action === 'team-step' && !result.ok) [...(current?.querySelectorAll('[data-co-action="team-step"]') ?? [])].find((node) => node.dataset.coValue === value.choice)?.focus();
+        else if (action === 'start-team' || action === 'team-step' || action === 'team-place') current?.querySelector('[data-co-piece], [data-co-result]')?.focus();
         else target?.focus();
       }
     }
     if (result.message) ctx.toast(result.message);
+  }
+
+  function selectPiece(id) {
+    selected = id;
+    for (const piece of pieces) piece.setAttribute('aria-pressed', String(piece.dataset.coPiece === id));
+    drop.dataset.selected = String(Boolean(id));
+    if (id) drop.setAttribute('aria-label', '放入' + handoffTools[id].name + '，' + drop.querySelector('strong').textContent);
+    else drop.removeAttribute('aria-label');
+  }
+
+  if (drop && !drop.disabled) {
+    play.ondragstart = (event) => {
+      const piece = event.target.closest('[data-co-piece]');
+      if (!piece || !event.dataTransfer) return;
+      dragging = true;
+      selectPiece(piece.dataset.coPiece);
+      event.dataTransfer.setData('text/plain', selected);
+      event.dataTransfer.effectAllowed = 'move';
+    };
+    play.ondragend = () => {
+      dragging = false;
+      selectPiece(null);
+      delete drop.dataset.over;
+    };
+    drop.ondragenter = drop.ondragover = (event) => {
+      if (!dragging) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      drop.dataset.over = 'true';
+    };
+    drop.ondragleave = (event) => { if (!drop.contains(event.relatedTarget)) delete drop.dataset.over; };
+    drop.ondrop = (event) => {
+      if (!dragging || !selected) return;
+      event.preventDefault();
+      run('team-place', { step: stage, item: selected }, drop);
+    };
   }
 
   main.onclick = (event) => {
@@ -518,8 +635,22 @@ export function bindCommunity(root, view, ctx) {
       if (nav.dataset.coGo !== view) ctx.go(nav.dataset.coGo);
       return;
     }
+    const piece = event.target.closest('[data-co-piece]');
+    if (piece && !piece.disabled) {
+      selectPiece(piece.dataset.coPiece);
+      drop.focus({ preventScroll: true });
+      return;
+    }
+    if (event.target.closest('[data-co-drop]') && !drop.disabled) {
+      if (selected) run('team-place', { step: stage, item: selected }, drop);
+      else ctx.toast('先从工具托盘选一件物品。');
+      return;
+    }
     const control = event.target.closest('[data-co-action]');
-    if (control && !control.disabled) run(control.dataset.coAction, control.dataset.coValue, control);
+    if (control && !control.disabled) {
+      const { coAction, coValue } = control.dataset;
+      run(coAction, coAction === 'team-step' ? { step: stage, choice: coValue } : coValue, control);
+    }
   };
 
   main.onsubmit = (event) => {

@@ -37,18 +37,36 @@ test('a help ticket must be claimed before resolving and contributes once', () =
   assert.equal(state.community.contribution, 1);
 });
 
-test('a co-op handoff requires a ready team and both role checks in order', () => {
+test('a co-op handoff requires placing the right item before confirming each check', () => {
   const state = workshop();
   assert.equal(run(state, 'invite', 'lin'), true);
   assert.equal(run(state, 'choose-role', 'quality'), true);
   assert.equal(run(state, 'start-team'), false);
   assert.equal(run(state, 'ready'), true);
   assert.equal(run(state, 'start-team'), true);
-  assert.equal(run(state, 'team-step', 'record'), false);
-  assert.equal(run(state, 'team-step', 'measure'), true);
-  assert.equal(run(state, 'team-step', 'measure'), false);
-  assert.equal(run(state, 'team-step', 'record'), true);
-  assert.equal(run(state, 'team-step', 'record'), false);
+  assert.equal(run(state, 'team-step', { step: 0, choice: 'measure' }), false);
+  assert.equal(run(state, 'team-place', { step: 0, item: 'cable' }), false);
+  assert.equal(run(state, 'team-place', { step: 0, item: 'gauge' }), true);
+  assert.equal(run(state, 'team-place', { step: 0, item: 'gauge' }), false);
+  assert.equal(run(state, 'team-step', { step: 0, choice: 'measure' }), true);
+  assert.equal(run(state, 'team-place', { step: 0, item: 'record' }), false);
+  assert.equal(run(state, 'team-place', { step: 1, item: 'record' }), true);
+  assert.equal(run(state, 'team-step', { step: 1, choice: 'record' }), true);
+  assert.equal(run(state, 'team-step', { step: 1, choice: 'record' }), false);
+  assert.equal(state.community.teamBest.quality, 88);
   assert.equal(state.community.contribution, 2);
   assert.equal(run(state, 'equip', 'handoff'), true);
+});
+
+test('a replay of a prior role can improve the score without repeating rewards', () => {
+  const state = workshop();
+  assert.equal(run(state, 'invite', 'lin'), true);
+  Object.assign(state.community.team, { stage: 'active', step: 1 });
+  state.community.teamWins.push('assembly');
+  assert.equal(run(state, 'team-place', { step: 1, item: 'record' }), true);
+  assert.equal(run(state, 'team-step', { step: 1, choice: 'torque' }), true);
+  assert.equal(state.coins, 240);
+  assert.equal(run(state, 'team-replay'), true);
+  assert.equal(state.community.team.step, 0);
+  assert.equal(state.community.team.stage, 'ready');
 });
