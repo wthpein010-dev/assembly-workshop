@@ -5,6 +5,7 @@ const zones = [
   { id: 'inspection', label: '质检区', blurb: '检查首件并核对检验记录，再把结果交给下一工位。', route: 'missions' },
   { id: 'repair', label: '维修区', blurb: '按故障现象定位原因，在返修台完成复测。', route: 'missions' },
   { id: 'packing', label: '包装与出货', blurb: '成品完成封装、标签复核和称重后发往集货区。' },
+  { id: 'automation', label: '自动化装配区', blurb: '沿参观通道看双线输送和机械臂作业，再到校准台与老化测试架。', route: 'missions' },
 ];
 
 const destinations = [
@@ -27,9 +28,12 @@ export function factoryPage(ctx) {
             <canvas data-factory-canvas tabindex="-1" aria-label="三维工厂" aria-describedby="factory-controls" aria-hidden="true" draggable="false"></canvas>
             <div class="factory-hud">
               <div class="factory-location"><i aria-hidden="true"></i><span data-factory-location>车间入口</span></div>
-              <div class="factory-modes" role="group" aria-label="工厂视角">
-                <button type="button" data-factory-mode="overview" aria-pressed="true" disabled>总览</button>
-                <button type="button" data-factory-mode="walk" aria-pressed="false" disabled>步行</button>
+              <div class="factory-camera-controls">
+                <div class="factory-modes" role="group" aria-label="工厂视角">
+                  <button type="button" data-factory-mode="overview" aria-pressed="true" disabled>总览</button>
+                  <button type="button" data-factory-mode="walk" aria-pressed="false" disabled>步行</button>
+                </div>
+                <button type="button" class="factory-fullscreen" data-factory-action="fullscreen" aria-label="全屏" title="全屏" hidden>⛶</button>
               </div>
             </div>
             <div class="factory-loading" data-factory-loading>
@@ -48,7 +52,8 @@ export function factoryPage(ctx) {
           </div>
           <div class="factory-console" id="factory-controls">
             <p data-factory-controls hidden>
-              <span class="factory-overview-help">选区域可拉近查看，切换步行进入工厂。</span>
+              <span class="factory-overview-help">点击画面后 <kbd>WASD</kbd> / <kbd>方向键</kbd> 平移 · 右键拖拽 · 滚轮缩放 · <kbd>V</kbd> 切换视角</span>
+              <span class="factory-pan-touch-help">拖动画面平移，点区域聚焦。</span>
               <span class="factory-key-help"><kbd>WASD</kbd> / <kbd>方向键</kbd> 移动 · 点击画面用鼠标转向 · <kbd>Esc</kbd> 释放 · <kbd>V</kbd> 切换视角 · <kbd>E</kbd> 互动</span>
               <span class="factory-touch-help">左侧圆盘移动，拖动画面转向。</span>
             </p>
@@ -86,6 +91,8 @@ export function bindFactoryPage(root, ctx) {
   const failure = find('[data-factory-error]');
   const controls = find('[data-factory-controls]');
   const reset = find('[data-factory-action="reset"]');
+  const fullscreen = find('[data-factory-action="fullscreen"]');
+  const doc = page.ownerDocument;
   const interact = find('[data-factory-action="interact"]');
   const stick = find('[data-factory-move]');
   const location = find('[data-factory-location]');
@@ -159,6 +166,7 @@ export function bindFactoryPage(root, ctx) {
   }
 
   function showMode(next, changing = false) {
+    if (next !== mode) location.textContent = next === 'walk' ? '车间通道' : '厂区总览';
     mode = next;
     transitioning = changing;
     stage.dataset.mode = next;
@@ -179,6 +187,25 @@ export function bindFactoryPage(root, ctx) {
     }
   }
 
+  function showFullscreen() {
+    const expanded = doc.fullscreenElement === stage;
+    const label = expanded ? '退出全屏' : '全屏';
+    fullscreen.hidden = !ready || !doc.fullscreenEnabled || !stage.requestFullscreen;
+    fullscreen.setAttribute('aria-label', label);
+    fullscreen.setAttribute('aria-pressed', String(expanded));
+    fullscreen.title = label;
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (doc.fullscreenElement === stage) await doc.exitFullscreen();
+      else await stage.requestFullscreen();
+      canvas.focus({ preventScroll: true });
+    } catch {
+      announce('此浏览器暂时无法切换全屏。');
+    }
+  }
+
   function showState(state) {
     ready = state === 'ready';
     stage.dataset.state = state;
@@ -187,6 +214,7 @@ export function bindFactoryPage(root, ctx) {
     failure.hidden = state !== 'failed';
     controls.hidden = !ready;
     reset.hidden = !ready;
+    showFullscreen();
     canvas.tabIndex = ready ? 0 : -1;
     if (ready) canvas.removeAttribute('aria-hidden');
     else canvas.setAttribute('aria-hidden', 'true');
@@ -286,6 +314,7 @@ export function bindFactoryPage(root, ctx) {
     }
     const action = button.dataset.factoryAction;
     if (action === 'retry') loadScene();
+    if (action === 'fullscreen' && ready) void toggleFullscreen();
     if (action === 'reset' && ready) {
       scene.reset();
       showPoint('entrance');
@@ -323,6 +352,7 @@ export function bindFactoryPage(root, ctx) {
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
     stage.addEventListener(type, event => stopLooking(event.pointerId), eventOptions);
   }
+  doc.addEventListener('fullscreenchange', showFullscreen, eventOptions);
   window.addEventListener('blur', () => {
     stopMoving();
     stopLooking();
@@ -335,6 +365,7 @@ export function bindFactoryPage(root, ctx) {
     stopMoving();
     stopLooking();
     listeners.abort();
+    if (doc.fullscreenElement === stage) void doc.exitFullscreen().catch(() => {});
     scene?.destroy();
   };
 }

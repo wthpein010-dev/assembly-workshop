@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EYE_HEIGHT, PLAYER_RADIUS, movementVector, movePlayer, nearestStandable,
-  isStandable, sampleCameraTransition, wrapAngle,
+  isStandable, sampleCameraTransition, wrapAngle, overviewDistance, shiftOverview, dampOverview,
 } from '../factory-motion.js';
 
 const layout = {
@@ -79,4 +79,33 @@ test('long waypoint flights take off and land before moving through nearby equip
   assert.equal(landing.x, to.x);
   assert.equal(landing.z, to.z);
   assert.ok(landing.y > EYE_HEIGHT);
+});
+
+const factoryBounds = { minX: -19.57, maxX: 29.55, minZ: -12.1, maxZ: 12.12 };
+
+test('overview fills a desktop viewport and accepts side crops on narrow screens', () => {
+  const azimuth = Math.atan2(30, 42);
+  const desktop = overviewDistance(factoryBounds, 1.6, azimuth, 37);
+  const narrow = overviewDistance(factoryBounds, 0.62, azimuth, 37);
+  assert.ok(desktop > 42 && desktop < 58, `desktop distance ${desktop}`);
+  assert.ok(narrow >= desktop && narrow < desktop * 1.25, `narrow distance ${narrow}`);
+});
+
+test('overhead panning moves in view directions and stays in factory bounds', () => {
+  const start = { x: 0, z: 0, zoom: 0.7 };
+  assert.deepEqual(shiftOverview(start, factoryBounds, 0, 4, 3), { x: 4, z: -3, zoom: 0.7 });
+  const edge = shiftOverview(start, factoryBounds, 0, 300, 300);
+  assert.ok(edge.x <= factoryBounds.maxX && edge.z >= factoryBounds.minZ);
+  assert.ok(edge.x > 25 && edge.z < -10);
+});
+
+test('overview easing preserves similar movement at different frame rates', () => {
+  const start = { x: 0, z: 0, zoom: 1 };
+  const target = { x: 12, z: -6, zoom: 0.55 };
+  const short = dampOverview(dampOverview(start, target, 1 / 60), target, 1 / 60);
+  const long = dampOverview(start, target, 1 / 30);
+  close(short.x, long.x);
+  close(short.z, long.z);
+  close(short.zoom, long.zoom);
+  assert.ok(long.x > 0 && long.x < target.x && long.zoom < start.zoom && long.zoom > target.zoom);
 });

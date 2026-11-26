@@ -7,6 +7,41 @@ export function wrapAngle(angle) {
   return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
+export function overviewDistance(bounds, aspect, azimuth, fov) {
+  const width = bounds.maxX - bounds.minX;
+  const depth = bounds.maxZ - bounds.minZ;
+  const sin = Math.abs(Math.sin(azimuth));
+  const cos = Math.abs(Math.cos(azimuth));
+  const projectedHeight = Math.SQRT1_2 * (width * sin + depth * cos) + 3.2;
+  const projectedWidth = width * cos + depth * sin;
+  // Allow narrow displays to crop the sides while keeping the floor useful at its center.
+  const frameHeight = Math.max(projectedHeight * 0.94, projectedWidth * 0.93 / Math.max(1.25, aspect));
+  return frameHeight / (2 * Math.tan(fov * Math.PI / 360));
+}
+
+export function shiftOverview(view, bounds, azimuth, right, forward) {
+  const sin = Math.sin(azimuth);
+  const cos = Math.cos(azimuth);
+  const insetX = Math.min(0.75, (bounds.maxX - bounds.minX) / 4);
+  const insetZ = Math.min(0.75, (bounds.maxZ - bounds.minZ) / 4);
+  return {
+    x: clamp(view.x + cos * right - sin * forward, bounds.minX + insetX, bounds.maxX - insetX),
+    z: clamp(view.z - sin * right - cos * forward, bounds.minZ + insetZ, bounds.maxZ - insetZ),
+    zoom: view.zoom,
+  };
+}
+
+export function dampOverview(current, target, elapsed) {
+  if (Math.abs(current.x - target.x) < 0.001 && Math.abs(current.z - target.z) < 0.001 &&
+      Math.abs(current.zoom - target.zoom) < 0.00005) return target;
+  const weight = 1 - Math.exp(-13 * elapsed);
+  return {
+    x: current.x + (target.x - current.x) * weight,
+    z: current.z + (target.z - current.z) * weight,
+    zoom: current.zoom + (target.zoom - current.zoom) * weight,
+  };
+}
+
 export function movementVector(yaw, strafe, forward) {
   const scale = Math.max(1, Math.hypot(strafe, forward));
   const sin = Math.sin(yaw);

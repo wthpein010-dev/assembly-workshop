@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/three/addons/loaders/GLTFLoader.js';
+import { createFactoryActivity } from './factory-activity.js';
 import {
-  EYE_HEIGHT, clamp, movementVector, movePlayer, nearestStandable,
-  sampleCameraTransition, wrapAngle,
+  EYE_HEIGHT, clamp, dampOverview, movementVector, movePlayer, nearestStandable,
+  overviewDistance, sampleCameraTransition, shiftOverview, wrapAngle,
 } from './factory-motion.js';
 
 const WALK_FOV = 66;
@@ -10,6 +11,8 @@ const OVERVIEW_FOV = 37;
 const WALK_SPEED = 3.25;
 const INTERACTION_RANGE = 2.0;
 const FACTORY_AZIMUTH = Math.atan2(30, 42);
+const CLOSE_OVERVIEW = 0.29;
+const FAR_OVERVIEW = 1.24;
 const WALK_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']);
 const ASSETS = ['factory.glb', 'worker-hero.glb', 'factory-layout.json'];
 
@@ -86,27 +89,50 @@ function disposeScene(root) {
   for (const geometry of geometries) geometry.dispose();
 }
 
-function addLighting(scene) {
-  scene.background = new THREE.Color(0x223b3c);
+function addLighting(scene, bounds) {
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerZ = (bounds.minZ + bounds.maxZ) / 2;
+  const width = bounds.maxX - bounds.minX;
+  const depth = bounds.maxZ - bounds.minZ;
+  scene.background = new THREE.Color(0x020403);
   scene.add(new THREE.HemisphereLight(0xfff6e8, 0x81989a, 2.1));
   const key = new THREE.DirectionalLight(0xffedcf, 2.45);
-  key.position.set(12, 27, 16);
+  key.position.set(centerX + 12, 27, centerZ + 16);
+  key.target.position.set(centerX, 0, centerZ);
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
-  Object.assign(key.shadow.camera, { left: -27, right: 27, top: 23, bottom: -23, near: 0.5, far: 62 });
+  const span = width * 0.55 + depth * 0.28;
+  Object.assign(key.shadow.camera, { left: -span, right: span, top: span * 0.78, bottom: -span * 0.78, near: 0.5, far: 76 });
   key.shadow.camera.updateProjectionMatrix();
   key.shadow.normalBias = 0.065;
   key.shadow.bias = -0.0002;
   key.shadow.radius = 2.0;
-  scene.add(key);
+  scene.add(key, key.target);
   const fill = new THREE.DirectionalLight(0xc9e5ff, 1.0);
-  fill.position.set(-13, 14, -11);
-  scene.add(fill);
+  fill.position.set(centerX - 13, 14, centerZ - 11);
+  fill.target.position.set(centerX, 0, centerZ);
+  scene.add(fill, fill.target);
 
-  const stage = new THREE.Mesh(new THREE.PlaneGeometry(220, 220),
-    new THREE.MeshStandardMaterial({ color: 0x314d4a, roughness: 0.96 }));
+  const surface = new THREE.MeshStandardMaterial({ color: 0x17201d, roughness: 1 });
+  surface.onBeforeCompile = shader => {
+    shader.uniforms.groundHalfSize = { value: new THREE.Vector2(width / 2 + 0.46, depth / 2 + 0.46) };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 stagePosition;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nstagePosition = position.xy;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 stagePosition;\nuniform vec2 groundHalfSize;')
+      .replace('#include <opaque_fragment>', `
+        vec2 distanceToEdge = abs(stagePosition) - groundHalfSize;
+        float outside = length(max(distanceToEdge, 0.0)) + min(max(distanceToEdge.x, distanceToEdge.y), 0.0);
+        float mist = 0.52 * sin(stagePosition.x * 0.34 + sin(stagePosition.y * 0.61))
+                   + 0.29 * sin(stagePosition.y * 0.41 - stagePosition.x * 0.19);
+        outgoingLight *= 1.0 - smoothstep(-0.32, 6.1, outside + mist);
+        #include <opaque_fragment>
+      `);
+  };
+  const stage = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), surface);
   stage.rotation.x = -Math.PI / 2;
-  stage.position.y = -1.39;
+  stage.position.set(centerX, -1.39, centerZ);
   stage.receiveShadow = true;
   scene.add(stage);
 }
@@ -178,7 +204,7 @@ function createWayfinding(layout, scene) {
   };
 }
 
-function addInteriorEnvelope(scene) {
+function addInteriorEnvelope(scene, { bounds, spawn }) {
   const shell = new THREE.Group();
   const make = (color, emission = 0) => new THREE.MeshStandardMaterial({
     color, roughness: 0.85, side: THREE.DoubleSide, transparent: true, opacity: 0,
@@ -194,14 +220,27 @@ function addInteriorEnvelope(scene) {
     item.position.set(x, y, z);
     shell.add(item);
   }
-  part(ceiling, 0, 4.67, 0, 39.72, 0.16, 24.57);
-  part(wall, 19.73, 2.63, 0, 0.31, 3.91, 24.34);
-  part(wall, -18.52, 2.45, 12.28, 2.85, 4.26, 0.30);
-  part(wall, 2.93, 2.45, 12.28, 33.78, 4.26, 0.30);
-  part(beam, -15.64, 3.73, 12.29, 2.92, 1.81, 0.30);
-  for (const z of [-9, -3, 3, 9]) {
-    part(beam, 0, 4.37, z, 39.40, 0.31, 0.24);
-    for (const x of [-14.5, -5, 4.5, 14]) {
+  const west = bounds.minX - 0.18;
+  const east = bounds.maxX + 0.20;
+  const north = bounds.minZ - 0.16;
+  const south = bounds.maxZ + 0.16;
+  const centerX = (west + east) / 2;
+  const centerZ = (north + south) / 2;
+  const width = east - west;
+  const depth = south - north;
+  const openingHalf = 1.46;
+  const entranceX = clamp(spawn.x, west + openingHalf, east - openingHalf);
+  const openingWest = entranceX - openingHalf;
+  const openingEast = entranceX + openingHalf;
+
+  part(ceiling, centerX, 4.67, centerZ, width + 0.16, 0.16, depth + 0.07);
+  part(wall, east, 2.63, centerZ, 0.31, 3.91, depth);
+  if (openingWest > west) part(wall, (west + openingWest) / 2, 2.45, south, openingWest - west, 4.26, 0.30);
+  if (openingEast < east) part(wall, (openingEast + east) / 2, 2.45, south, east - openingEast, 4.26, 0.30);
+  part(beam, entranceX, 3.73, south, openingHalf * 2, 1.81, 0.30);
+  for (let z = north + 3; z < south - 1; z += 6) {
+    part(beam, centerX, 4.37, z, width, 0.31, 0.24);
+    for (let x = west + 5.25; x < east - 1.7; x += 9.5) {
       part(beam, x, 4.18, z, 2.55, 0.12, 0.31);
       part(lamp, x, 4.108, z, 2.36, 0.035, 0.24);
     }
@@ -233,10 +272,12 @@ export function createFactoryScene(canvas, options = {}) {
   const tabIndex = canvas.getAttribute('tabindex');
   const savedTouchAction = canvas.style.touchAction;
   const scene = new THREE.Scene();
-  const revealInterior = addInteriorEnvelope(scene);
   const camera = new THREE.PerspectiveCamera(OVERVIEW_FOV, 1, 0.045, 280);
   const lookTarget = new THREE.Vector3();
-  let renderer, resizeObserver, layout, player, hero, heroShadow, updateWayfinding;
+  let renderer, resizeObserver, layout, player, hero, heroShadow, updateWayfinding, revealInterior, activity;
+  let visibilityObserver;
+  let canvasVisible = true;
+  let overviewView, overviewTarget;
   let mode = 'overview';
   let previewPoint = null;
   let activeZone = null;
@@ -245,6 +286,7 @@ export function createFactoryScene(canvas, options = {}) {
   let dirty = true;
   let destroyed = false;
   let aspect = 1;
+  let viewportHeight = 1;
   let pitch = 0;
   let touchX = 0;
   let touchY = 0;
@@ -254,33 +296,23 @@ export function createFactoryScene(canvas, options = {}) {
   let locked = false;
   let heroYaw = FACTORY_AZIMUTH * 0.66;
 
-  function overviewPose(point = previewPoint) {
+  function centerOverview() {
     const { bounds } = layout;
-    const x = point?.x ?? (bounds.minX + bounds.maxX) / 2;
-    const y = point ? 0.78 : -0.35;
-    const z = point?.z ?? (bounds.minZ + bounds.maxZ) / 2;
-    const elevation = Math.PI / 4;
-    const sx = Math.sin(FACTORY_AZIMUTH);
-    const sz = Math.cos(FACTORY_AZIMUTH);
-    const inward = { x: sx * Math.cos(elevation), y: Math.sin(elevation), z: sz * Math.cos(elevation) };
-    const halfWidth = point ? 4 : (bounds.maxX - bounds.minX) / 2 + 1.45;
-    const halfDepth = point ? 3 : (bounds.maxZ - bounds.minZ) / 2 + 1.65;
-    const fovTangent = Math.tan(OVERVIEW_FOV * Math.PI / 360);
-    let distance = 9;
-    for (const dx of [-halfWidth, halfWidth]) {
-      for (const dz of [-halfDepth, halfDepth]) {
-        for (const dy of [-2.7, point ? 2.0 : 3.5]) {
-          const along = inward.x * dx + inward.y * dy + inward.z * dz;
-          const right = sz * dx - sx * dz;
-          const up = -sx * inward.y * dx + Math.cos(elevation) * dy - sz * inward.y * dz;
-          distance = Math.max(distance, along + Math.max(Math.abs(up) / fovTangent,
-            Math.abs(right) / (fovTangent * Math.max(0.2, aspect))));
-        }
-      }
-    }
+    overviewView = overviewTarget = { x: (bounds.minX + bounds.maxX) / 2, z: (bounds.minZ + bounds.maxZ) / 2, zoom: 1 };
+  }
+
+  function overviewRadius() {
+    return overviewDistance(layout.bounds, aspect, FACTORY_AZIMUTH, OVERVIEW_FOV) * overviewView.zoom;
+  }
+
+  function overviewPose() {
+    const diagonal = overviewRadius() * Math.SQRT1_2;
+    const targetY = 0.30 + (1 - Math.min(overviewView.zoom, 1)) * 0.78;
     return {
-      x: x + inward.x * distance, y: y + inward.y * distance, z: z + inward.z * distance,
-      yaw: wrapAngle(FACTORY_AZIMUTH + Math.PI), pitch: -elevation, fov: OVERVIEW_FOV,
+      x: overviewView.x + Math.sin(FACTORY_AZIMUTH) * diagonal,
+      y: targetY + diagonal,
+      z: overviewView.z + Math.cos(FACTORY_AZIMUTH) * diagonal,
+      yaw: wrapAngle(FACTORY_AZIMUTH + Math.PI), pitch: -Math.PI / 4, fov: OVERVIEW_FOV,
     };
   }
 
@@ -334,8 +366,8 @@ export function createFactoryScene(canvas, options = {}) {
 
   function finishTransition() {
     transition = null;
-    setZone(mode === 'overview' ? previewPoint : nearestZone());
     onMode?.(mode, false);
+    setZone(mode === 'overview' ? previewPoint : nearestZone());
   }
 
   function flyTo(getTarget, milliseconds, lift, travelInset = 0) {
@@ -360,6 +392,7 @@ export function createFactoryScene(canvas, options = {}) {
     keys.clear();
     touchX = 0;
     touchY = 0;
+    endDrag();
   }
 
   function endDrag() {
@@ -374,12 +407,10 @@ export function createFactoryScene(canvas, options = {}) {
     if (!layout) return true;
     clearInput();
     setZone(null);
-    previewPoint = null;
     if (mode === 'overview') {
-      endDrag();
       if (doc.pointerLockElement === canvas) doc.exitPointerLock?.();
     }
-    flyTo(mode === 'overview' ? overviewPose : walkPose, 1220, 3.8);
+    flyTo(mode === 'overview' ? overviewPose : walkPose, 1220, 3.8, 0.24);
     return true;
   }
 
@@ -394,6 +425,8 @@ export function createFactoryScene(canvas, options = {}) {
 
     if (mode === 'overview') {
       previewPoint = point;
+      overviewView = overviewTarget = shiftOverview({ x: point.x, z: point.z, zoom: CLOSE_OVERVIEW + 0.05 },
+        layout.bounds, FACTORY_AZIMUTH, 0, 0);
       setZone(point);
       flyTo(overviewPose, 900, 1.35);
     } else {
@@ -415,6 +448,7 @@ export function createFactoryScene(canvas, options = {}) {
     if (!layout || destroyed) return false;
     player = { ...nearestStandable(layout.spawn, layout), yaw: layoutHeading(layout.spawn.yaw) };
     previewPoint = null;
+    centerOverview();
     pitch = 0;
     heroYaw = FACTORY_AZIMUTH * 0.66;
     clearInput();
@@ -433,7 +467,12 @@ export function createFactoryScene(canvas, options = {}) {
   }
 
   function lookTouch(dx, dy) {
-    if (!layout || destroyed || mode !== 'walk' || transition || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    if (!layout || destroyed || transition || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    if (mode === 'overview') {
+      const metersPerPixel = 2 * overviewRadius() * Math.tan(OVERVIEW_FOV * Math.PI / 360) / viewportHeight;
+      panOverview(-dx * metersPerPixel, dy * metersPerPixel * Math.SQRT2);
+      return;
+    }
     player.yaw = wrapAngle(player.yaw - dx * 0.0028);
     pitch = clamp(pitch - dy * 0.0028, -Math.PI * 0.46, Math.PI * 0.46);
     applyPose(walkPose());
@@ -447,10 +486,16 @@ export function createFactoryScene(canvas, options = {}) {
     return true;
   }
 
-  function updatePlayer(delta) {
+  function directionInput() {
     const hasKey = (one, two) => Number(keys.has(one) || keys.has(two));
-    const strafe = hasKey('KeyD', 'ArrowRight') - hasKey('KeyA', 'ArrowLeft') + touchX;
-    const forward = hasKey('KeyW', 'ArrowUp') - hasKey('KeyS', 'ArrowDown') - touchY;
+    return {
+      strafe: hasKey('KeyD', 'ArrowRight') - hasKey('KeyA', 'ArrowLeft') + touchX,
+      forward: hasKey('KeyW', 'ArrowUp') - hasKey('KeyS', 'ArrowDown') - touchY,
+    };
+  }
+
+  function updatePlayer(delta) {
+    const { strafe, forward } = directionInput();
     if (!(strafe || forward)) return;
     const vector = movementVector(player.yaw, strafe, forward);
     const next = movePlayer(player, vector.x * delta * WALK_SPEED, vector.z * delta * WALK_SPEED, layout);
@@ -462,10 +507,26 @@ export function createFactoryScene(canvas, options = {}) {
     setZone(nearestZone());
   }
 
+  function panOverview(right, forward) {
+    overviewTarget = shiftOverview(overviewTarget, layout.bounds, FACTORY_AZIMUTH, right, forward);
+  }
+
+  function updateOverview(delta) {
+    const { strafe, forward } = directionInput();
+    if (strafe || forward) {
+      const step = overviewRadius() * 0.31 * delta / Math.max(1, Math.hypot(strafe, forward));
+      panOverview(strafe * step, forward * step);
+    }
+    if (overviewView === overviewTarget) return;
+    overviewView = reducedMotion?.matches ? overviewTarget : dampOverview(overviewView, overviewTarget, delta);
+    applyPose(overviewPose());
+  }
+
   function resize() {
     const { width, height } = canvas.getBoundingClientRect();
     if (!renderer || !width || !height) return;
     aspect = width / height;
+    viewportHeight = height;
     const pixelRatio = Math.min(win.devicePixelRatio || 1, 1.65);
     if (renderer.getPixelRatio() !== pixelRatio) renderer.setPixelRatio(pixelRatio);
     renderer.setSize(Math.round(width), Math.round(height), false);
@@ -486,8 +547,15 @@ export function createFactoryScene(canvas, options = {}) {
       if (progress >= 1) finishTransition();
     } else if (mode === 'walk') {
       updatePlayer(delta);
+    } else {
+      updateOverview(delta);
     }
-    if (dirty && !doc.hidden) {
+    const canRender = canvasVisible && !doc.hidden;
+    if (activity?.active && canRender) {
+      activity.update(delta);
+      dirty = true;
+    }
+    if (dirty && canRender) {
       renderer.render(scene, camera);
       dirty = false;
     }
@@ -503,7 +571,7 @@ export function createFactoryScene(canvas, options = {}) {
         if (event.code === 'KeyV') toggleMode();
         else interact();
       }
-    } else if (mode === 'walk' && WALK_KEYS.has(event.code)) {
+    } else if (WALK_KEYS.has(event.code)) {
       event.preventDefault();
       keys.add(event.code);
     }
@@ -517,12 +585,15 @@ export function createFactoryScene(canvas, options = {}) {
   }
 
   function pointerDown(event) {
-    if (event.button !== 0 || event.pointerType === 'touch' || !layout) return;
+    if (!layout || (event.button !== 0 && event.button !== 2)) return;
+    if (mode === 'walk' && (event.pointerType !== 'mouse' || event.button !== 0)) return;
     canvas.focus({ preventScroll: true });
-    if (mode !== 'walk' || transition || locked) return;
+    if (transition || locked || drag) return;
+    if (mode === 'overview' && event.pointerType !== 'touch' && event.button !== 2) return;
+    event.preventDefault();
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
     canvas.setPointerCapture?.(event.pointerId);
-    if (event.pointerType !== 'mouse' || lockFailed || lockPending || !canvas.requestPointerLock) return;
+    if (mode !== 'walk' || event.pointerType !== 'mouse' || lockFailed || lockPending || !canvas.requestPointerLock) return;
     lockPending = true;
     try {
       canvas.requestPointerLock()?.then(() => {
@@ -553,7 +624,7 @@ export function createFactoryScene(canvas, options = {}) {
   function installControls() {
     if (tabIndex === null) canvas.tabIndex = 0;
     canvas.style.touchAction = 'none';
-    const listen = (target, event, listener) => target.addEventListener(event, listener, { signal: controls.signal });
+    const listen = (target, event, listener, options) => target.addEventListener(event, listener, { ...options, signal: controls.signal });
     listen(doc, 'keydown', onKeyDown);
     listen(doc, 'keyup', event => keys.delete(event.code));
     listen(canvas, 'blur', clearInput);
@@ -563,6 +634,16 @@ export function createFactoryScene(canvas, options = {}) {
       else dirty = true;
     });
     listen(canvas, 'pointerdown', pointerDown);
+    listen(canvas, 'contextmenu', event => { if (layout && mode === 'overview') event.preventDefault(); });
+    listen(canvas, 'wheel', event => {
+      if (!layout || mode !== 'overview' || transition || event.ctrlKey) return;
+      event.preventDefault();
+      canvas.focus({ preventScroll: true });
+      const multiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewportHeight : 1;
+      const change = clamp(event.deltaY * multiplier, -360, 360);
+      const zoom = clamp(overviewTarget.zoom * Math.exp(change * 0.0014), CLOSE_OVERVIEW, FAR_OVERVIEW);
+      overviewTarget = { ...overviewTarget, zoom };
+    }, { passive: false });
     listen(canvas, 'pointermove', event => {
       if (drag?.id !== event.pointerId || locked) return;
       lookTouch(event.clientX - drag.x, event.clientY - drag.y);
@@ -590,6 +671,10 @@ export function createFactoryScene(canvas, options = {}) {
     } else {
       listen(win, 'resize', resize);
     }
+    if (win.IntersectionObserver) {
+      visibilityObserver = new win.IntersectionObserver(([entry]) => { canvasVisible = entry.isIntersecting; });
+      visibilityObserver.observe(canvas);
+    }
   }
 
   function destroy() {
@@ -599,7 +684,7 @@ export function createFactoryScene(canvas, options = {}) {
     controls.abort();
     if (frameId !== undefined) win.cancelAnimationFrame(frameId);
     resizeObserver?.disconnect();
-    endDrag();
+    visibilityObserver?.disconnect();
     clearInput();
     if (doc.pointerLockElement === canvas) doc.exitPointerLock?.();
     canvas.style.touchAction = savedTouchAction;
@@ -617,7 +702,6 @@ export function createFactoryScene(canvas, options = {}) {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.shadowMap.autoUpdate = false;
-    addLighting(scene);
     installControls();
     resize();
     onProgress?.(0);
@@ -648,6 +732,9 @@ export function createFactoryScene(canvas, options = {}) {
     }
 
     layout = map;
+    centerOverview();
+    addLighting(scene, layout.bounds);
+    revealInterior = addInteriorEnvelope(scene, layout);
     player = { ...spawn, yaw: layoutHeading(layout.spawn.yaw) };
     const factory = models[0].value.scene;
     factory.traverse(object => {
@@ -661,6 +748,7 @@ export function createFactoryScene(canvas, options = {}) {
     heroShadow = addHeroShadow(scene);
     scene.add(factory, hero);
     updateWayfinding = createWayfinding(layout, scene);
+    activity = createFactoryActivity(scene, layout, { reducedMotion: reducedMotion?.matches });
     placeHero();
     applyPose(mode === 'overview' ? overviewPose() : walkPose());
     renderer.shadowMap.needsUpdate = true;
