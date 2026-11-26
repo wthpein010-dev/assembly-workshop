@@ -2,8 +2,8 @@ import * as THREE from './vendor/three/three.module.min.js';
 import { RECOVERY_RECIPES } from './factory-recovery.js';
 
 const FLOOR = .039;
-const MINT = 0x61e7cd;
-const CITRUS = 0xd7ec57;
+const SIGNAL_BLUE = 0x66c9f5;
+const EQUIPMENT_ORANGE = 0xef8a4d;
 const AMBER = 0xffb65b;
 const GREEN = 0x76f593;
 const palettes = {
@@ -36,11 +36,11 @@ function createKit() {
     color, opacity, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide,
   });
   const materials = {
-    frame: metal(0x303b3e, .32), runner: metal(0x121a1d, .1, .72), dark: metal(0x1d2a2e, .24),
-    panel: metal(0x485e60, .35, .47), steel: metal(0xa1afab, .63, .38), graphite: metal(0x52605e, .52),
-    citrus: metal(CITRUS, .19, .39), jade: metal(0x319184, .26, .42), circuit: metal(0x318067, .13),
-    gold: metal(0xe5ac57, .48, .38), pearl: metal(0xcad6c3, .24), amber: led(AMBER, .39),
-    mint: led(MINT, .61), ready: led(GREEN, .85),
+    frame: metal(0x313e50, .32), runner: metal(0x161f2b, .1, .72), dark: metal(0x232f42, .24),
+    panel: metal(0x516b83, .35, .47), steel: metal(0xa7b2be, .63, .38), graphite: metal(0x586776, .52),
+    stripe: metal(EQUIPMENT_ORANGE, .19, .39), painted: metal(0x426f94, .26, .42), circuit: metal(0x318067, .13),
+    gold: metal(0xdc8645, .48, .38), pearl: metal(0xe4e0d6, .24), amber: led(AMBER, .39),
+    signal: led(SIGNAL_BLUE, .61), ready: led(GREEN, .85),
   };
   function mesh(group, material, x, y, z, w, h, d, geometry = box) {
     const part = new THREE.Mesh(geometry, material);
@@ -76,14 +76,14 @@ function label(group, doc, name, tint, y, width = .88) {
   image.height = 72;
   const draw = image.getContext('2d');
   if (!draw) return null;
-  draw.fillStyle = '#122624';
+  draw.fillStyle = '#172d45';
   draw.fillRect(2, 7, 252, 58);
-  draw.strokeStyle = '#466e65';
+  draw.strokeStyle = '#6e8eac';
   draw.lineWidth = 2;
   draw.strokeRect(3, 8, 250, 56);
   draw.fillStyle = new THREE.Color(tint).getStyle();
   draw.fillRect(7, 13, 5, 46);
-  draw.fillStyle = '#eaf9ee';
+  draw.fillStyle = '#eff6ff';
   draw.font = '600 35px "Microsoft YaHei", system-ui, sans-serif';
   draw.textAlign = 'center';
   draw.textBaseline = 'middle';
@@ -109,7 +109,7 @@ function robotModel(bot, kit, doc) {
   root.add(body);
   mesh(body, m.runner, 0, .23, 0, width * .76, .31, length * .88, shell);
   mesh(body, m.frame, 0, .46, -.045, width * .79, .40, length * .74, shell);
-  mesh(body, m.jade, 0, .57, length * .19, width * .69, .12, .24, shell);
+  mesh(body, m.painted, 0, .57, length * .19, width * .69, .12, .24, shell);
   const wheelPods = [];
   for (const side of [-1, 1]) {
     const pod = new THREE.Group();
@@ -122,18 +122,18 @@ function robotModel(bot, kit, doc) {
       const rim = mesh(pod, m.graphite, side * .137, .151, z * length * .25, .181, .044, .181, cylinder);
       rim.rotation.z = Math.PI / 2;
     }
-    mesh(body, m.citrus, side * width * .36, .48, .015, .153, .223, length * .55, shell)
+    mesh(body, m.stripe, side * width * .36, .48, .015, .153, .223, length * .55, shell)
       .rotation.z = side * -.24;
   }
 
   if (bot.type === 'scan') {
     mesh(body, m.steel, 0, .78, -.075, .29, .63, .27, shell);
-    mesh(body, m.jade, 0, .865, .032, .36, .26, .256, shell);
-    mesh(body, m.citrus, .13, top + .07, -.18, .025, .235, .028, cylinder).rotation.z = -.22;
+    mesh(body, m.painted, 0, .865, .032, .36, .26, .256, shell);
+    mesh(body, m.stripe, .13, top + .07, -.18, .025, .235, .028, cylinder).rotation.z = -.22;
     mesh(body, m.amber, .15, top + .18, -.18, .067, .07, .067, hex);
   } else if (bot.type === 'dash') {
     for (const side of [-1, 1]) {
-      mesh(body, m.citrus, .22 * side, .32, .42, .29, .22, .262, shell).rotation.y = .32 * side;
+      mesh(body, m.stripe, .22 * side, .32, .42, .29, .22, .262, shell).rotation.y = .32 * side;
       mesh(body, m.panel, .255 * side, .66, -.34, .19, .575, .28, shell).rotation.x = -.22;
     }
     mesh(body, m.gold, 0, .56, -.34, .44, .1, .125, shell);
@@ -141,7 +141,7 @@ function robotModel(bot, kit, doc) {
     const roller = mesh(body, m.steel, 0, .272, .43, .16, .61, .16, cylinder);
     roller.rotation.z = Math.PI / 2;
     for (const x of [-.21, 0, .21]) {
-      mesh(body, m.jade, x, .272, .43, .198, .074, .198, cylinder).rotation.z = Math.PI / 2;
+      mesh(body, m.painted, x, .272, .43, .198, .074, .198, cylinder).rotation.z = Math.PI / 2;
     }
   }
 
@@ -150,16 +150,16 @@ function robotModel(bot, kit, doc) {
   body.add(head);
   const nose = bot.type === 'dash' ? .32 : .265;
   const span = bot.type === 'scan' ? .48 : width * .77;
-  mesh(head, m.citrus, 0, .038, -.026, span, .32, .46, shell).rotation.x = -.14;
+  mesh(head, m.stripe, 0, .038, -.026, span, .32, .46, shell).rotation.x = -.14;
   mesh(head, m.dark, 0, -.015, nose - .074, span * .83, .184, .171, shell);
-  const eye = led(MINT, .91);
+  const eye = led(SIGNAL_BLUE, .91);
   const optic = mesh(head, eye, -offset * .68, -.011, nose + .01, .132, .058, .122, hex);
   optic.rotation.x = Math.PI / 2;
   mesh(head, m.steel, -offset * .68, -.011, nose + .044, .054, .012, .054, cylinder).rotation.x = Math.PI / 2;
   mesh(head, eye, offset * .74, -.013, nose + .014, .119, .028, .026, shell).rotation.z = -.10;
   mesh(head, m.pearl, 0, .108, .119, span * .59, .028, .108, shell);
   mesh(body, m.dark, 0, .519, length * .451, .289, .143, .039, shell);
-  const core = led(MINT, .92);
+  const core = led(SIGNAL_BLUE, .92);
   mesh(body, core, 0, .515, length * .475, .104, .068, .12, hex).rotation.x = Math.PI / 2;
   for (const x of [-.145, .145]) mesh(body, m.steel, x, .515, length * .481, .025, .069, .018, shell);
 
@@ -167,8 +167,8 @@ function robotModel(bot, kit, doc) {
   field.name = 'shield';
   field.position.set(0, eyeY - .14, length * .52 + .065);
   root.add(field);
-  const shield = glow(MINT, .14);
-  const edge = glow(MINT, .48);
+  const shield = glow(SIGNAL_BLUE, .14);
+  const edge = glow(SIGNAL_BLUE, .48);
   const spanField = width * .94;
   mesh(field, shield, 0, .015, .024, spanField, .53, .036, shell);
   for (const side of [-1, 1]) {
@@ -196,9 +196,9 @@ function robotModel(bot, kit, doc) {
       mesh(arrow, warningMat, side * .103, 0, .015, .05, .011, .28).rotation.y = side * -.67;
     }
   }
-  const exposed = flat(root, glow(MINT, .68), FLOOR + .006, width * .79);
+  const exposed = flat(root, glow(SIGNAL_BLUE, .68), FLOOR + .006, width * .79);
   exposed.name = 'exposed';
-  const tag = label(root, doc, bot.name, MINT, top + .36, 1.05);
+  const tag = label(root, doc, bot.name, SIGNAL_BLUE, top + .36, 1.05);
   return { root, body, head, wheelPods, field, shield, edge, eye, core, warning, warningMat, warningFill, exposed, tag,
     signature: '', kick: 0, guarded: false };
 }
@@ -216,9 +216,9 @@ function partModel(id, root, kit) {
     mesh(root, m.steel, 0, .006, .049, .345, .24, .041, shell);
     mesh(root, m.dark, .018, -.01, .075, .218, .115, .025, shell);
     mesh(root, m.gold, -.091, -.119, .045, .118, .047, .026, shell);
-    mesh(root, m.mint, .062, .021, .094, .068, .022, .016, shell);
+    mesh(root, m.signal, .062, .021, .094, .068, .022, .016, shell);
   } else if (id === 'harness') {
-    for (const [index, material] of [m.jade, m.gold, m.runner].entries()) {
+    for (const [index, material] of [m.painted, m.gold, m.runner].entries()) {
       const r = index * .037;
       const path = new THREE.CatmullRomCurve3([
         [-.21, -.09, .02], [-.21 + r, .099, .012], [-.09 + r, .166 - r, 0], [.064, .154 - r, .022],
@@ -236,26 +236,26 @@ function partModel(id, root, kit) {
       const hub = new THREE.Group();
       hub.rotation.z = index * Math.PI * .4;
       root.add(hub);
-      mesh(hub, m.jade, .029, .092, .075, .083, .156, .025, shell).rotation.z = .38;
+      mesh(hub, m.painted, .029, .092, .075, .083, .156, .025, shell).rotation.z = .38;
     }
     mesh(root, m.steel, 0, 0, .099, .119, .046, .119, hex).rotation.x = Math.PI / 2;
   } else if (id === 'sensor') {
-    mesh(root, m.citrus, 0, -.098, -.018, .36, .093, .22, shell);
+    mesh(root, m.stripe, 0, -.098, -.018, .36, .093, .22, shell);
     mesh(root, m.dark, 0, .014, -.009, .265, .192, .249, shell);
     mesh(root, m.steel, 0, .026, .126, .185, .138, .185, hex).rotation.x = Math.PI / 2;
-    mesh(root, m.mint, 0, .026, .191, .123, .035, .123, cylinder).rotation.x = Math.PI / 2;
+    mesh(root, m.signal, 0, .026, .191, .123, .035, .123, cylinder).rotation.x = Math.PI / 2;
     mesh(root, m.amber, .129, .086, .124, .04, .022, .038, shell);
   } else {
     mesh(root, m.pearl, 0, 0, 0, .387, .268, .14, shell);
     mesh(root, m.dark, .018, .032, .076, .228, .132, .029, shell);
-    mesh(root, m.mint, -.029, .058, .096, .034, .023, .014, shell);
+    mesh(root, m.signal, -.029, .058, .096, .034, .023, .014, shell);
     mesh(root, m.amber, .024, .058, .096, .034, .023, .014, shell);
-    for (const x of [-.136, -.068, 0, .068, .136]) mesh(root, m.jade, x, -.089, .084, .05, .068, .045, shell);
+    for (const x of [-.136, -.068, 0, .068, .136]) mesh(root, m.painted, x, -.089, .084, .05, .068, .045, shell);
   }
 }
 
 function dropModel(drop, kit, doc) {
-  const tint = new THREE.Color(drop.color ?? MINT);
+  const tint = new THREE.Color(drop.color ?? SIGNAL_BLUE);
   const root = new THREE.Group();
   root.name = `recovery-part-${drop.partId}`;
   kit.contact(root, .95, .91);
@@ -284,7 +284,7 @@ function projectModel(recipe, bench, kit) {
   mesh(root, m.steel, 0, .097, .015, .465, .025, .327, shell);
   if (recipe.id === 'tester') {
     mesh(root, m.frame, .019, .353, -.018, .384, .485, .268, shell);
-    mesh(root, m.jade, .018, .33, .121, .339, .369, .052, shell);
+    mesh(root, m.painted, .018, .33, .121, .339, .369, .052, shell);
     mesh(root, m.runner, .014, .43, .154, .274, .16, .025, shell);
     for (const x of [-.065, .003, .071]) mesh(root, m.ready, x, .421, .176, .033, .048, .013, shell);
     for (const y of [.204, .237, .27]) mesh(root, m.dark, .048, y, .148, .207, .014, .017);
@@ -293,7 +293,7 @@ function projectModel(recipe, bench, kit) {
     mesh(root, m.panel, 0, .249, -.04, .47, .308, .245, shell);
     const face = mesh(root, m.dark, 0, .303, .103, .391, .203, .032, shell);
     face.rotation.x = -.42;
-    const screen = mesh(root, m.jade, -.013, .319, .121, .254, .139, .025, shell);
+    const screen = mesh(root, m.painted, -.013, .319, .121, .254, .139, .025, shell);
     screen.rotation.x = face.rotation.x;
     for (const [index, height] of [.035, .056, .042, .075].entries()) {
       mesh(root, m.ready, -.101 + index * .052, .277 + height / 2, .142, .018, height, .018);
@@ -311,7 +311,7 @@ function effectPool(root, kit) {
   const slots = Array.from({ length: 4 }, () => {
     const group = new THREE.Group();
     group.visible = false;
-    const mat = kit.glow(MINT, .65);
+    const mat = kit.glow(SIGNAL_BLUE, .65);
     const arc = kit.flat(group, mat, FLOOR + .021, 1, wave);
     const ring = kit.flat(group, mat, FLOOR + .019, 1);
     const sparks = Array.from({ length: 4 }, () => kit.mesh(group, mat, 0, 0, 0, .042, .075, .042, kit.hex));
@@ -320,7 +320,7 @@ function effectPool(root, kit) {
   });
   let slotIndex = 0;
   return {
-    burst({ x, z, yaw = 0, distance = 1, tint = MINT, kind = 'wave' }) {
+    burst({ x, z, yaw = 0, distance = 1, tint = SIGNAL_BLUE, kind = 'wave' }) {
       const slot = slots[slotIndex];
       slotIndex = (slotIndex + 1) % slots.length;
       Object.assign(slot, { kind, distance, time: 0 });
@@ -368,7 +368,7 @@ function robotPose(model, bot, delta, time, player, reducedMotion) {
   const exposed = bot.phase === 'vulnerable' || bot.phase === 'recoil';
   const near = Math.hypot(player.x - bot.x, player.z - bot.z) < 4.1;
   const progress = limit(bot.phaseElapsed / (bot.phaseDuration || 1), 0, 1);
-  const phaseTone = disabled ? 0x344244 : telegraph || model.guarded && model.kick > 0 ? AMBER : MINT;
+  const phaseTone = disabled ? 0x344244 : telegraph || model.guarded && model.kick > 0 ? AMBER : SIGNAL_BLUE;
   const signature = `${bot.phase}/${bot.x}/${bot.z}/${bot.yaw}/${near}/${model.kick > 0}`;
   const changed = model.signature !== signature;
   model.signature = signature;
@@ -387,7 +387,7 @@ function robotPose(model, bot, delta, time, player, reducedMotion) {
   model.eye.emissive.set(disabled ? 0 : phaseTone);
   model.eye.emissiveIntensity = telegraph ? .82 + windup * .74 : .88 + model.kick * .45;
   model.core.color.set(disabled ? 0x3f554e : exposed ? 0x9affdd : 0x388677);
-  model.core.emissive.set(disabled ? 0 : MINT);
+  model.core.emissive.set(disabled ? 0 : SIGNAL_BLUE);
   model.core.emissiveIntensity = exposed ? 1.43 + idle * .28 : .23;
   model.field.visible = !disabled && !exposed;
   model.shield.color.set(phaseTone);
@@ -473,13 +473,13 @@ export function createRecoveryVisuals(scene, simulation, { document: doc, reduce
     if (!event) return;
     if (event.type === 'pulse' && ['hit', 'disabled', 'guarded', 'miss'].includes(event.outcome)) {
       const guarded = event.outcome === 'guarded';
-      effects.burst({ ...event, distance: limit(event.distance || 2.1, .3, 5.15), tint: guarded ? AMBER : MINT });
+      effects.burst({ ...event, distance: limit(event.distance || 2.1, .3, 5.15), tint: guarded ? AMBER : SIGNAL_BLUE });
       const bot = simulation.state.robots.find(item => item.id === event.robotId);
       const model = robots.get(event.robotId);
       if (model && bot) {
         model.kick = guarded ? .65 : 1;
         model.guarded = guarded;
-        effects.burst({ x: bot.x, z: bot.z, kind: 'hit', tint: guarded ? AMBER : MINT });
+        effects.burst({ x: bot.x, z: bot.z, kind: 'hit', tint: guarded ? AMBER : SIGNAL_BLUE });
       }
     } else if (event.type === 'collect') {
       effects.burst({ x: event.x, z: event.z, kind: 'pickup', tint: GREEN });

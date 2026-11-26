@@ -100,9 +100,9 @@ function addLighting(scene, bounds) {
   const centerZ = (bounds.minZ + bounds.maxZ) / 2;
   const width = bounds.maxX - bounds.minX;
   const depth = bounds.maxZ - bounds.minZ;
-  scene.background = new THREE.Color(0x020403);
-  scene.add(new THREE.HemisphereLight(0xfff6e8, 0x81989a, 2.1));
-  const key = new THREE.DirectionalLight(0xffedcf, 2.45);
+  scene.background = new THREE.Color(0x050912);
+  scene.add(new THREE.HemisphereLight(0xf0f6ff, 0xb5aaa0, 2.05));
+  const key = new THREE.DirectionalLight(0xfff2df, 2.25);
   key.position.set(centerX + 12, 27, centerZ + 16);
   key.target.position.set(centerX, 0, centerZ);
   key.castShadow = true;
@@ -114,12 +114,12 @@ function addLighting(scene, bounds) {
   key.shadow.bias = -0.0002;
   key.shadow.radius = 2.0;
   scene.add(key, key.target);
-  const fill = new THREE.DirectionalLight(0xc9e5ff, 1.0);
+  const fill = new THREE.DirectionalLight(0xd8eaff, 0.95);
   fill.position.set(centerX - 13, 14, centerZ - 11);
   fill.target.position.set(centerX, 0, centerZ);
   scene.add(fill, fill.target);
 
-  const surface = new THREE.MeshStandardMaterial({ color: 0x17201d, roughness: 1 });
+  const surface = new THREE.MeshStandardMaterial({ color: 0x202c3a, roughness: 1 });
   surface.onBeforeCompile = shader => {
     shader.uniforms.groundHalfSize = { value: new THREE.Vector2(width / 2 + 0.46, depth / 2 + 0.46) };
     shader.vertexShader = shader.vertexShader
@@ -148,7 +148,7 @@ function addHeroShadow(scene) {
     transparent: true,
     depthWrite: false,
     vertexShader: 'varying vec2 coord; void main() {coord = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);}',
-    fragmentShader: 'varying vec2 coord; void main() {float d = length((coord - vec2(0.5)) * 2.0); gl_FragColor = vec4(0.03, 0.06, 0.05, (1.0 - smoothstep(0.03, 1.0, d)) * 0.34);}',
+    fragmentShader: 'varying vec2 coord; void main() {float d = length((coord - vec2(0.5)) * 2.0); gl_FragColor = vec4(0.03, 0.05, 0.08, (1.0 - smoothstep(0.03, 1.0, d)) * 0.34);}',
   });
   const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.03, 0.83), material);
   shadow.rotation.x = -Math.PI / 2;
@@ -157,11 +157,32 @@ function addHeroShadow(scene) {
   return shadow;
 }
 
+function styleWorker(model, profile) {
+  const jacketColors = [0x314c65, 0x426985, 0x343e4e];
+  const trouserColors = [0x414854, 0x3b5263, 0x484d54];
+  const skinColors = [undefined, 0xc99167, 0x795442];
+  const skinDetails = [undefined, 0xb17258, 0x623d35];
+  const colors = {
+    'worker.jacket': jacketColors[profile?.group],
+    'worker.trousers': trouserColors[profile?.group],
+    'worker.skin': skinColors[profile?.tone],
+    'worker.skin-detail': skinDetails[profile?.tone],
+  };
+  model.traverse(object => {
+    if (!object.isMesh) return;
+    object.receiveShadow = true;
+    for (const material of [object.material].flat()) {
+      const tint = colors[material?.name];
+      if (tint !== undefined) material.color?.setHex(tint);
+    }
+  });
+}
+
 function createWayfinding(layout, scene) {
   const rings = new THREE.Group();
   const geometry = new THREE.RingGeometry(0.36, 0.415, 32);
-  const neutral = new THREE.Color(0x72bca5);
-  const selected = new THREE.Color(0xffc979);
+  const neutral = new THREE.Color(0x77b3d8);
+  const selected = new THREE.Color(0xffad64);
   for (const point of layout.points) {
     const ring = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: neutral }));
     ring.rotation.x = -Math.PI / 2;
@@ -173,7 +194,7 @@ function createWayfinding(layout, scene) {
   scene.add(rings);
 
   const guide = new THREE.Group();
-  const guideMaterial = new THREE.MeshBasicMaterial({ color: 0xa2dbc0, transparent: true, opacity: 0.78, depthWrite: false });
+  const guideMaterial = new THREE.MeshBasicMaterial({ color: 0x9dc8e5, transparent: true, opacity: 0.78, depthWrite: false });
   const segmentGeometry = new THREE.PlaneGeometry(1, 1);
   // Keep complete ownership of the reusable path assets even with no selected destination.
   const segments = layout.points.reduce((maximum, point) => Math.max(maximum, point.path?.length || 0), 0);
@@ -230,15 +251,15 @@ function benchBadgeTexture(doc, number) {
   draw.lineTo(15, 29);
   draw.closePath();
   draw.lineJoin = 'round';
-  draw.strokeStyle = '#101a18';
+  draw.strokeStyle = '#101a2a';
   draw.lineWidth = 11;
   draw.stroke();
-  draw.fillStyle = '#162321';
+  draw.fillStyle = '#1b334b';
   draw.fill();
-  draw.strokeStyle = '#cedbd6';
+  draw.strokeStyle = '#d0e0ec';
   draw.lineWidth = 4;
   draw.stroke();
-  draw.fillStyle = '#f6fff9';
+  draw.fillStyle = '#f6faff';
   draw.font = '700 53px system-ui, sans-serif';
   draw.textAlign = 'center';
   draw.textBaseline = 'middle';
@@ -254,7 +275,7 @@ function createBenchMarkers(scene, benches, doc) {
   const ringGeometry = benches.length ? new THREE.RingGeometry(0.28, 0.325, 24) : null;
   const benchMarkers = benches.map((bench, index) => {
     const material = new THREE.SpriteMaterial({
-      map: benchBadgeTexture(doc, index + 1), color: 0xb3dfce, sizeAttenuation: false,
+      map: benchBadgeTexture(doc, index + 1), color: 0xc3def1, sizeAttenuation: false,
       transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
     });
     const badge = new THREE.Sprite(material);
@@ -264,7 +285,7 @@ function createBenchMarkers(scene, benches, doc) {
     badge.position.copy(anchor);
     badge.renderOrder = 7;
     const ring = new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({
-      color: 0x8dd8bd, transparent: true, opacity: 0.76, depthWrite: false,
+      color: 0x91bbd8, transparent: true, opacity: 0.76, depthWrite: false,
     }));
     ring.position.set(bench.x, 0.044, bench.z);
     ring.rotation.x = -Math.PI / 2;
@@ -286,10 +307,10 @@ function createBenchMarkers(scene, benches, doc) {
         const active = nearest?.id === bench.id;
         badge.visible = !hidden && (mode === 'overview' || distance < 8.0);
         ring.visible = !hidden && (mode === 'overview' || distance < 9.0);
-        badge.material.color.setHex(active ? 0xffca78 : 0xb3dfce);
+        badge.material.color.setHex(active ? 0xffbd85 : 0xc3def1);
         badge.scale.setScalar(viewSize * (active ? 54 : size));
         badge.position.copy(anchor);
-        ring.material.color.setHex(active ? 0xffc775 : 0x8dd8bd);
+        ring.material.color.setHex(active ? 0xffad64 : 0x91bbd8);
         ring.scale.setScalar(active ? 1.23 : 1);
         if (mode !== 'overview' || hidden) continue;
         projected.copy(anchor).project(camera);
@@ -317,10 +338,10 @@ function addInteriorEnvelope(scene, { bounds, spawn }) {
     color, roughness: 0.85, side: THREE.DoubleSide, transparent: true, opacity: 0,
     depthWrite: false, emissive: color, emissiveIntensity: emission,
   });
-  const ceiling = make(0x637771);
-  const beam = make(0x365353);
-  const wall = make(0x78948d);
-  const lamp = make(0xe1eedd, 0.75);
+  const ceiling = make(0xb5b5b1);
+  const beam = make(0x46576b);
+  const wall = make(0xc8c7bc);
+  const lamp = make(0xf5f0e7, 0.67);
   const materials = [ceiling, beam, wall, lamp];
   function part(mat, x, y, z, w, h, d) {
     const item = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -367,9 +388,9 @@ function addInteriorEnvelope(scene, { bounds, spawn }) {
 
 export function createFactoryScene(canvas, options = {}) {
   const {
-    assetUrl = name => `./assets/${name}`,
+    assetUrl = name => `./assets/${name}${name.endsWith('.glb') ? '?v=ca1' : ''}`,
     onProgress, onReady, onMode, onZone, onStatus, onInteract,
-    onBenchNearby, onBench, recovery: initialRecovery, onRecovery, onRecoveryView,
+    onBenchNearby, onBench, recovery: initialRecovery, onRecovery, onRecoveryView, workerProfile,
   } = options;
   const doc = canvas.ownerDocument;
   const win = doc.defaultView;
@@ -1071,7 +1092,7 @@ export function createFactoryScene(canvas, options = {}) {
     resize();
     onProgress?.(0);
 
-    const urls = ASSETS.map(assetUrl);
+    const urls = ASSETS.map((name, index) => assetUrl(index === 1 && workerProfile?.gender === 'female' ? 'worker-hero-female.glb' : name));
     const weights = [0.85, 0.12, 0.03];
     const progress = [0, 0, 0];
     const [factoryBytes, heroBytes, layoutBytes] = await Promise.all(urls.map((url, index) =>
@@ -1109,7 +1130,7 @@ export function createFactoryScene(canvas, options = {}) {
       }
     });
     hero = models[1].value.scene;
-    hero.traverse(object => { if (object.isMesh) object.receiveShadow = true; });
+    styleWorker(hero, workerProfile);
     heroShadow = addHeroShadow(scene);
     scene.add(factory, hero);
     updateWayfinding = createWayfinding(layout, scene);

@@ -485,6 +485,7 @@ export function bindFactoryPage(root, ctx) {
       if (!active()) return;
       scene = createFactoryScene(canvas, {
         recovery: recoveryProgress,
+        workerProfile: ctx.state().profile,
         onProgress(value) {
           if (active() && Number.isFinite(value)) progress.value = Math.min(1, Math.max(0, value));
         },

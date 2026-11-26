@@ -12,6 +12,7 @@ const entries = [
   'factory-workbenches.js', 'factory-workbenches.css',
   'factory-recovery.js', 'factory-recovery-view.js', 'factory-recovery-ui.js', 'factory-recovery.css',
   'shop-page.js', 'shop-catalog.js', 'shop.css',
+  'california-ui.css',
   ...safe.filter(name => name.endsWith('.webp') || name === 'icon.png').map(name => 'assets/' + name),
 ];
 const mime = {
@@ -24,7 +25,7 @@ const staticFiles = Object.fromEntries(await Promise.all(entries.map(async file 
 })));
 // Large scene data and the unchanged Three.js package are served by the public static mirror.
 const external = [
-  '/assets/factory.glb', '/assets/worker-hero.glb',
+  '/assets/factory.glb', '/assets/worker-hero.glb', '/assets/worker-hero-female.glb',
   '/vendor/three/three.core.min.js', '/vendor/three/three.module.min.js',
   '/vendor/three/addons/loaders/GLTFLoader.js', '/vendor/three/addons/utils/BufferGeometryUtils.js',
 ];

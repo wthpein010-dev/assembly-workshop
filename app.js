@@ -30,7 +30,7 @@ let worldRequest = false;
 let selectedHandoff = '';
 
 
-const asset = id => './assets/' + id + '.webp';
+const asset = id => './assets/' + id + '.webp?v=ca1';
 const cloud = makeCloud({
   current: () => state,
   restore: value => {
@@ -67,7 +67,7 @@ function go(route) {
   location.hash = route;
 }
 
-const ctx = { state: () => state, commit, go, toast, escape: esc, asset };
+const ctx = { state: () => state, commit, go, toast, escape: esc, asset, portrait };
 
 function changeRoute() {
   const requested = location.hash.slice(1);
@@ -134,21 +134,19 @@ function shell(contents, guest = false) {
 function startPage() {
   return `<section class="start-scene">
     <div class="start-hero container">
-      <span class="bay-label"><i></i> 电 子 装 配 车 间</span>
+      <span class="bay-label"><i></i> 加州电子装配车间</span>
       <h1>装配工坊</h1>
       <p>进车间，接工单，练成真正用得上的装配、质检与排障技能。</p>
       <div class="btn-row">
         ${button(state.profile ? '继续游戏' : '创建角色', state.profile ? 'hall' : 'create', 'primary')}
         ${!state.profile ? '<button type="button" class="btn btn-secondary" data-action="quick">快速试玩</button>' : button('我的工位', 'honor')}
-        ${!state.profile ? button('先看厂区', 'world', 'text') : ''}
-        ${button('逛积分店', 'shop', 'text')}
       </div>
     </div>
-    <div class="start-chapters container">
-      <div><strong>01</strong><span>在工位练习</span></div>
-      <div><strong>02</strong><span>和工友协作</span></div>
-      <div><strong>03</strong><span>解锁岗位技能</span></div>
-    </div>
+    <nav class="start-chapters container" aria-label="工坊入口">
+      <a href="#world"><strong>场景导览</strong><span>参观车间、定位工作台</span></a>
+      <a href="#${state.profile ? 'missions' : 'create'}"><strong>岗位训练</strong><span>练习装配、质检和返修</span></a>
+      <a href="#shop"><strong>积分兑换</strong><span>浏览奖励和工友礼物</span></a>
+    </nav>
   </section>`;
 }
 
@@ -166,7 +164,7 @@ function creatorPage() {
      <div class="choice-block"><h3>发型</h3><div class="choices">${options('hair', HAIR_LABELS.map((n, i) => [i, n]))}</div></div>
      <div class="choice-block"><h3>肤色</h3><div class="choices">${options('tone', TONES.map((n, i) => [i, n]))}</div></div>`,
     `<h2>给角色取个名字</h2><p>工友会在大厅与聊天中看到这个名字。</p>
-     <label for="nick">角色昵称</label><input id="nick" name="nickname" type="text" autocomplete="off" spellcheck="false" maxlength="28" value="${draft.name === '新人工友' ? '' : esc(draft.name)}" placeholder="例如 林小满" aria-describedby="name-hint">
+     <label for="nick">角色昵称</label><input id="nick" name="nickname" type="text" autocomplete="off" spellcheck="false" maxlength="28" value="${draft.name === '新人工友' ? '' : esc(draft.name)}" placeholder="例如 Alex-Lin" aria-describedby="name-hint">
      <p id="name-hint" class="field-hint" aria-live="polite">可用汉字、字母、数字，长度 2–14 字。</p>`,
   ];
   return `<section class="container creator">

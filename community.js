@@ -1,9 +1,9 @@
 import { SHOP_GIFT_NOTES, SHOP_ITEMS, isShopRedeemed } from './shop-catalog.js';
 
 const contacts = {
-  lin: { name: '林师傅', role: '维修导师', sign: '林', reply: '先把现场现象和测量结果记下来，下一班就知道从哪里查起。' },
-  qiao: { name: '小乔', role: '质检伙伴', sign: '乔', reply: '我来复核记录。把测量值和异常点一起发给我。' },
-  zhu: { name: '老朱', role: '装配搭档', sign: '朱', reply: '收到。工件对齐了再锁紧，有偏差就先停一下。' },
+  lin: { name: '林师傅', role: '维修导师', sign: '林', look: { gender: 'male', face: 2 }, reply: '先把现场现象和测量结果记下来，下一班就知道从哪里查起。' },
+  qiao: { name: '小乔', role: '质检伙伴', sign: '乔', look: { gender: 'female', face: 1 }, reply: '我来复核记录。把测量值和异常点一起发给我。' },
+  zhu: { name: '老朱', role: '装配搭档', sign: '朱', look: { gender: 'male', face: 3 }, reply: '收到。工件对齐了再锁紧，有偏差就先停一下。' },
 };
 const channels = { floor: '工坊大厅', tips: '技巧交流', shifts: '交接频道' };
 const briefs = {
@@ -309,7 +309,12 @@ function fieldOptions(collection, active) {
   return Object.entries(collection).map(([id, label]) => `<option value="${id}"${id === active ? ' selected' : ''}>${label}</option>`).join('');
 }
 
-function socialPage(c, e) {
+function contactIdentity(person, ctx) {
+  const photo = ctx.portrait?.(person.look);
+  return `<div class="co-person-id"><span class="co-avatar${photo ? ' co-avatar-photo' : ''}" aria-hidden="true">${photo ?? person.sign}</span><div><h3>${person.name}</h3><p>${person.role} · 演示 NPC</p></div></div>`;
+}
+
+function socialPage(c, e, ctx) {
   const key = c.friendChat ?? c.channel;
   const [briefAuthor, briefMessage] = briefs[c.channel];
   const seed = c.friendChat
@@ -339,7 +344,7 @@ function socialPage(c, e) {
         <div class="co-directory">
           ${Object.entries(contacts).map(([id, person]) => `
             <article class="co-person">
-              <div class="co-person-id"><span class="co-avatar" aria-hidden="true">${person.sign}</span><div><h3>${person.name}</h3><p>${person.role} · 演示 NPC</p></div></div>
+              ${contactIdentity(person, ctx)}
               <div class="co-toolbar">
                 ${c.friends.includes(id) ? button('direct', id, '私聊', { pressed: c.friendChat === id }) : button('friend', id, '添加好友')}
                 ${button('invite', id, '组队', { primary: true, disabled: c.team?.stage === 'active' })}
@@ -409,7 +414,7 @@ function teamPage(c, state, e, ctx) {
       <section class="co-panel">
         <div class="co-row"><h2>邀请工友</h2>${link('online', '真人联机')}</div>
         <div class="co-directory">
-          ${Object.entries(contacts).map(([id, person]) => `<article class="co-person"><div class="co-person-id"><span class="co-avatar" aria-hidden="true">${person.sign}</span><div><h3>${person.name}</h3><p>${person.role} · 演示 NPC</p></div></div>${button('invite', id, team?.mate === id && team.stage !== 'complete' ? '已应邀' : '邀请', { disabled: team?.stage === 'active' || (team?.mate === id && team.stage !== 'complete') })}</article>`).join('')}
+          ${Object.entries(contacts).map(([id, person]) => `<article class="co-person">${contactIdentity(person, ctx)}${button('invite', id, team?.mate === id && team.stage !== 'complete' ? '已应邀' : '邀请', { disabled: team?.stage === 'active' || (team?.mate === id && team.stage !== 'complete') })}</article>`).join('')}
         </div>
       </section>
     </div>`;
@@ -519,7 +524,7 @@ function eventPage(c) {
 }
 
 const pageBodies = {
-  social: (c, s, e) => socialPage(c, e),
+  social: (c, _state, e, ctx) => socialPage(c, e, ctx),
   team: teamPage,
   help: (c, s, e) => helpPage(c, e),
   honor: honorPage,
