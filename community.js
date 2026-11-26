@@ -1,3 +1,5 @@
+import { SHOP_GIFT_NOTES, SHOP_ITEMS, isShopRedeemed } from './shop-catalog.js';
+
 const contacts = {
   lin: { name: '林师傅', role: '维修导师', sign: '林', reply: '先把现场现象和测量结果记下来，下一班就知道从哪里查起。' },
   qiao: { name: '小乔', role: '质检伙伴', sign: '乔', reply: '我来复核记录。把测量值和异常点一起发给我。' },
@@ -14,15 +16,7 @@ const tasks = {
   check: { name: '首件质量复核', view: 'missions' },
   repair: { name: '轴承异响排查', view: 'help' },
 };
-const items = {
-  pin: { name: '扭矩校准章', icon: '⟐', type: '纪念徽章', price: 60, note: '为每一次有记录的拧紧。' },
-  cap: { name: '夜班安全帽', icon: '◒', type: '工坊收藏', price: 100, note: '帽沿有一条醒目的反光带。' },
-  thermos: { name: '班组保温杯', icon: '▤', type: '工坊收藏', price: 80, note: '杯身压印着工坊的齿轮标记。' },
-  banner: { name: '稳产先锋', icon: '⚑', type: '个人称号', price: 160, note: '给按节拍交付的工位搭档。' },
-  newcomer: { name: '初入工坊', icon: '✦', type: '纪念徽章', note: '导师发来的入门礼。' },
-  handoff: { name: '交接能手', icon: '◇', type: '个人称号', note: '完成一次传动泵班组交接。' },
-  season: { name: '工坊同行者', icon: '❖', type: '个人称号', note: '带着班组一起达成本期目标。' },
-};
+const items = SHOP_ITEMS;
 const handoffTools = {
   screw: { name: '定位螺钉', code: 'M4', asset: 'part-screw' },
   gauge: { name: '间隙规片', code: '0.15 mm' },
@@ -57,7 +51,7 @@ const routes = {
 const seasonBase = 3;
 const seasonGoal = 8;
 
-function newCommunity() {
+export function newCommunity() {
   return {
     channel: 'floor', friendChat: null, friends: [], messages: {},
     team: null, teamWins: [], teamBest: {}, ticketNumber: 0, ticketFilter: 'all', editing: null,
@@ -65,7 +59,7 @@ function newCommunity() {
       { id: 'bearing', by: 'lin', title: '传动轴承异响', text: '试转记录里出现了周期性异响。工件已停机挂牌，待排查原因并记录复测。', visibility: 'public', stage: 'open' },
       { id: 'bracket', by: 'qiao', title: '支架复测单缺读数', text: '第二次复测已完成，原工单还少一个间隙读数。请核对后补齐记录。', visibility: 'team', stage: 'open' },
     ],
-    owned: [], equipped: null, shopTab: 'exchange', honorTab: 'honors', gifts: [],
+    owned: [], equipped: null, shopTab: 'exchange', honorTab: 'honors', gifts: [], shopOrders: [],
     inbox: [{ id: 'welcome', item: 'newcomer', by: 'lin', text: '送你第一枚工坊徽章。来求助板看看，也欢迎和我组队。' }],
     contribution: 0, shared: false, seasonClaimed: false,
   };
@@ -78,6 +72,13 @@ const handoffScore = (team) => Math.max(0, 100 - 12 * (team.misses ?? 0));
 const clean = (value, limit) => typeof value === 'string' ? value.trim().slice(0, limit) : '';
 const teammate = (id) => named(contacts, id)?.name ?? '演示工友';
 const grant = (c, id) => { if (!c.owned.includes(id)) c.owned.push(id); };
+
+export const shopFriendName = teammate;
+
+export function shopFriends(community) {
+  const friends = Array.isArray(community?.friends) ? community.friends : [];
+  return [...new Set(friends)].filter((id) => named(contacts, id)).map((id) => ({ id, name: teammate(id) }));
+}
 
 function post(c, author, text, task = null) {
   const key = c.friendChat ?? c.channel;
@@ -246,23 +247,35 @@ function applyAction(state, c, action, value) {
       return success();
     case 'buy': {
       const item = named(items, value);
-      if (!item?.price || c.owned.includes(value)) return failure('这件物品无法再兑换。');
-      if (state.coins < item.price) return failure('积分不足。');
+      if (!item?.price || isShopRedeemed(c, value)) return failure('这件物品无法再兑换。');
+      if (!Number.isSafeInteger(state.coins) || state.coins < item.price) return failure('积分不足。');
+      const physical = item.kind === 'physical';
+      const order = {
+        id: 'exchange-' + item.id, item: item.id, kind: item.kind, spent: item.price,
+        status: physical ? 'pending' : 'received', createdAt: Date.now(),
+      };
+      const orders = Array.isArray(c.shopOrders) ? c.shopOrders : [];
       state.coins -= item.price;
-      grant(c, value);
-      return success('已兑换「' + item.name + '」，可在背包查看。');
+      c.shopOrders = [order, ...orders];
+      if (!physical) grant(c, value);
+      return { ...success(physical ? '已生成「' + item.name + '」的模拟兑换记录。'
+        : '已兑换「' + item.name + '」，可在背包查看。'), order };
     }
     case 'equip':
-      if (!c.owned.includes(value)) return failure('先获得这件物品。');
+      if (!named(items, value)?.equipable || !c.owned.includes(value)) return failure('先获得可展示的物品。');
       c.equipped = c.equipped === value ? null : value;
       return success(c.equipped ? '已佩戴「' + items[value].name + '」。' : '已卸下当前荣誉。');
     case 'send-gift': {
       const item = named(items, value?.item);
-      if (!item?.price || !c.friends.includes(value?.to)) return failure('请选择物品和一位好友。');
+      if (!item?.price || !item.giftable || item.kind !== 'virtual'
+          || !named(contacts, value?.to) || !c.friends.includes(value?.to)) return failure('请选择可赠送的虚拟物品和一位演示好友。');
+      if (value.note != null && value.note !== '' && (typeof value.note !== 'string' || !named(SHOP_GIFT_NOTES, value.note))) {
+        return failure('请选择预设留言。');
+      }
       if (c.gifts.some((gift) => gift.to === value.to && gift.item === value.item)) return failure('已送过这件礼物。');
-      if (state.coins < item.price) return failure('积分不足。');
+      if (!Number.isSafeInteger(state.coins) || state.coins < item.price) return failure('积分不足。');
       state.coins -= item.price;
-      c.gifts.unshift({ item: value.item, to: value.to });
+      c.gifts.unshift({ item: value.item, to: value.to, ...(value.note ? { note: value.note } : {}) });
       c.inbox.unshift({ id: 'thanks-' + value.to + '-' + value.item, by: value.to, text: '收到「' + item.name + '」了，谢谢。下次交接我也来搭把手。' });
       return success('已送给' + teammate(value.to) + '。');
     }
@@ -443,57 +456,37 @@ function helpPage(c, e) {
     </div>`;
 }
 
-function itemCard(id, action = '', { disabled = false, primary = false } = {}) {
+function collectibleArt(item, ctx) {
+  return item?.price ? `<span class="co-item-icon co-item-photo"><img src="${ctx.escape(ctx.asset(item.asset))}" loading="lazy" alt=""></span>`
+    : `<span class="co-item-icon" aria-hidden="true">${item?.icon ?? '◇'}</span>`;
+}
+
+function itemCard(id, action, ctx) {
   const item = items[id];
   return `<article class="co-item">
-    <div class="co-item-icon" aria-hidden="true">${item.icon}</div>
+    ${collectibleArt(item, ctx)}
     <div class="co-item-body"><p class="co-kicker">${item.type}</p><h3>${item.name}</h3><p>${item.note}</p></div>
-    ${action ? button(primary ? 'buy' : 'equip', id, action, { disabled, primary }) : ''}
+    ${action ? button('equip', id, action) : ''}
   </article>`;
 }
 
-function shopPage(c, state) {
-  const market = Object.entries(items).filter(([, item]) => item.price);
-  let content;
-  if (c.shopTab === 'exchange') {
-    content = `<div class="co-items">${market.map(([id, item]) => {
-      const owned = c.owned.includes(id);
-      return itemCard(id, owned ? '已拥有' : state.coins >= item.price ? '兑换 · ' + item.price + ' 积分' : item.price + ' 积分 · 不足', { primary: true, disabled: owned || state.coins < item.price });
-    }).join('')}</div><div class="co-toolbar">${button('honor-tab', 'bag', '打开背包')}</div>`;
-  } else if (c.shopTab === 'gift') {
-    content = c.friends.length ? `
-      <div class="co-columns co-gift"><form class="co-form" data-co-form="send-gift">
-        <label for="co-gift-to">收礼工友</label><select id="co-gift-to" name="to">${fieldOptions(Object.fromEntries(c.friends.map((id) => [id, teammate(id)])))}</select>
-        <label for="co-gift-item">礼物</label><select id="co-gift-item" name="item">${fieldOptions(Object.fromEntries(market.map(([id, item]) => [id, item.name + ' · ' + item.price + ' 积分'])))}</select>
-        <div class="co-toolbar"><button class="btn btn-primary" type="submit">送出礼物</button></div>
-      </form>
-      <div><h3>送礼记录</h3>${c.gifts.length ? `<ul class="co-list">${c.gifts.map((gift) => `<li>送给${teammate(gift.to)} · ${items[gift.item].name}</li>`).join('')}</ul>` : '<p class="co-empty">送出的礼物会记录在这里。</p>'}</div></div>`
-      : `<div class="co-empty"><p>先添加一位工友，就能给对方送礼。</p>${link('social', '打开工友名录')}</div>`;
-  } else {
-    content = c.inbox.length ? `<div class="co-ticket-list">${c.inbox.map((gift) => `<article class="co-ticket"><div class="co-row"><h3>${gift.item ? items[gift.item].name : '工友回信'}</h3><span class="co-tag">${teammate(gift.by)} · 演示 NPC</span></div><p>${gift.text}</p>${button('accept-gift', gift.id, gift.item ? '领取礼物' : '标为已读', { primary: true })}</article>`).join('')}</div>` : '<p class="co-empty">暂无未读来信。</p>';
-  }
-  return `<section class="co-panel">
-    <div class="co-row"><h2>工坊货架</h2><span class="co-balance">可用积分 <strong>${state.coins}</strong></span></div>
-    <div class="co-tabs" aria-label="兑换站栏目">${Object.entries({ exchange: '积分兑换', gift: '送礼', inbox: '收件箱' + (c.inbox.length ? ' · ' + c.inbox.length : '') }).map(([id, label]) => button('shop-tab', id, label, { pressed: c.shopTab === id })).join('')}</div>
-    ${content}
-  </section>`;
-}
-
-function honorPage(c) {
-  const worn = c.equipped ? items[c.equipped] : null;
-  const shown = c.honorTab === 'bag' ? c.owned : c.owned.filter((id) => items[id].type !== '工坊收藏');
+function honorPage(c, _state, _escape, ctx) {
+  const worn = named(items, c.equipped);
+  const owned = c.owned.filter((id) => named(items, id));
+  const shown = c.honorTab === 'bag' ? owned : owned.filter((id) => items[id].equipable && items[id].type !== '工坊收藏');
   return `<div class="co-columns">
     <section class="co-panel">
-      <div class="co-row"><h2>我的藏品</h2><span class="co-tag">${c.owned.length} 件</span></div>
+      <div class="co-row"><h2>我的藏品</h2><span class="co-tag">${owned.length} 件</span></div>
       <div class="co-tabs" aria-label="荣誉与背包">${button('honor-tab', 'honors', '徽章与称号', { pressed: c.honorTab === 'honors' })}${button('honor-tab', 'bag', '全部背包', { pressed: c.honorTab === 'bag' })}</div>
       ${shown.length ? `<div class="co-items">${shown.map((id) => {
         const collectible = items[id].type === '工坊收藏';
-        return itemCard(id, c.equipped === id ? (collectible ? '收起' : '卸下') : (collectible ? '展示' : '佩戴'));
+        const action = c.equipped === id ? (collectible ? '收起' : '卸下') : (collectible ? '展示' : '佩戴');
+        return itemCard(id, items[id].equipable ? action : '', ctx);
       }).join('')}</div>` : `<div class="co-empty"><p>完成班组交接，或到兑换站领取工坊入门礼。</p><div class="co-toolbar">${link('team', '去班组')}${link('shop', '去兑换站')}</div></div>`}
     </section>
     <section class="co-panel">
       <h2>工坊名片</h2>
-      <div class="co-honor-stamp"><span class="co-item-icon" aria-hidden="true">${worn?.icon ?? '◇'}</span><h3>${worn?.name ?? '尚未佩戴荣誉'}</h3>${worn ? `<p>${worn.note}</p>` : ''}</div>
+      <div class="co-honor-stamp">${collectibleArt(worn, ctx)}<h3>${worn?.name ?? '尚未佩戴荣誉'}</h3>${worn ? `<p>${worn.note}</p>` : ''}</div>
     </section>
   </div>`;
 }
@@ -529,14 +522,14 @@ const pageBodies = {
   social: (c, s, e) => socialPage(c, e),
   team: teamPage,
   help: (c, s, e) => helpPage(c, e),
-  shop: shopPage,
   honor: honorPage,
   event: eventPage,
 };
 
 export function communityPage(view, ctx) {
   const route = named(routes, view);
-  if (!route) return '';
+  const body = named(pageBodies, view);
+  if (!route || !body) return '';
   const [title, description, art] = route;
   const state = ctx.state();
   const c = state.community ?? newCommunity();
@@ -547,7 +540,7 @@ export function communityPage(view, ctx) {
       <div class="co-heading"><h1 id="co-title-page">${title}</h1><p>${description}</p></div>
     </header>`}
     <nav class="co-nav" aria-label="工坊社区">${Object.entries(routes).map(([id, [label]]) => `<a href="#${id}" data-co-go="${id}"${view === id ? ' aria-current="page"' : ''}>${label}</a>`).join('')}</nav>
-    ${pageBodies[view](c, state, ctx.escape, ctx)}
+    ${body(c, state, ctx.escape, ctx)}
   </section>`;
 }
 
@@ -556,7 +549,6 @@ const formActions = {
   share: (data) => data.task,
   'save-ticket': (data) => data,
   'resolve-ticket': (data, form) => ({ ...data, id: form.dataset.coTicket }),
-  'send-gift': (data) => ({ item: data.item, to: data.to }),
 };
 
 export function bindCommunity(root, view, ctx) {
@@ -576,7 +568,6 @@ export function bindCommunity(root, view, ctx) {
     if (result.ok || result.changed) {
       ctx.commit((state) => Object.assign(state, next));
       if ((action === 'invite' && view === 'social') || action === 'challenge-team') ctx.go('team');
-      else if (action === 'honor-tab' && view === 'shop') ctx.go('honor');
       else {
         const current = root.ownerDocument.querySelector('.community');
         const target = source.id ? root.ownerDocument.getElementById(source.id)

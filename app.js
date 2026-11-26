@@ -3,12 +3,13 @@ import { makeCloud } from './cloud.js';
 import { trainingPage, bindTraining } from './training.js';
 import { communityPage, bindCommunity } from './community.js';
 import { factoryPage, bindFactoryPage } from './factory-page.js';
+import { shopPage, bindShop } from './shop-page.js';
 
 const app = document.querySelector('#app');
 const notice = document.querySelector('#notice');
 const trainingViews = new Set(['missions', 'station', 'record']);
-const communityViews = new Set(['social', 'team', 'help', 'shop', 'honor', 'event']);
-const viewNames = { hall: '任务大厅', world: '工坊地图', missions: '任务手册', station: '模拟工位', record: '技能记录', social: '班组交流', team: '组队训练', help: '求助板', shop: '工坊商店', honor: '我的工位', event: '工坊建设周', online: '联机大厅', account: '角色与存档', create: '创建角色', start: '装配工坊' };
+const communityViews = new Set(['social', 'team', 'help', 'honor', 'event']);
+const viewNames = { hall: '任务大厅', world: '工坊地图', missions: '任务手册', station: '模拟工位', record: '技能记录', social: '班组交流', team: '组队训练', help: '求助板', shop: '积分兑换店', honor: '我的工位', event: '工坊建设周', online: '联机大厅', account: '角色与存档', create: '创建角色', start: '装配工坊' };
 const cloudStatus = { local: '本地存档', connecting: '连接中', ready: '云档已同步', saving: '正在同步', conflict: '待处理云档', offline: '云档暂未连接' };
 const roles = [ '身份绑定', '定制角色', '角色取名' ];
 const coopSteps = [
@@ -71,7 +72,7 @@ const ctx = { state: () => state, commit, go, toast, escape: esc, asset };
 function changeRoute() {
   const requested = location.hash.slice(1);
   const route = Object.hasOwn(viewNames, requested) ? requested : state.profile ? 'hall' : 'start';
-  view = state.profile || ['start', 'create', 'account', 'world'].includes(route) ? route : 'start';
+  view = state.profile || ['start', 'create', 'account', 'world', 'shop'].includes(route) ? route : 'start';
   clearInterval(worldTimer);
 
   render();
@@ -140,6 +141,7 @@ function startPage() {
         ${button(state.profile ? '继续游戏' : '创建角色', state.profile ? 'hall' : 'create', 'primary')}
         ${!state.profile ? '<button type="button" class="btn btn-secondary" data-action="quick">快速试玩</button>' : button('我的工位', 'honor')}
         ${!state.profile ? button('先看厂区', 'world', 'text') : ''}
+        ${button('逛积分店', 'shop', 'text')}
       </div>
     </div>
     <div class="start-chapters container">
@@ -388,12 +390,14 @@ function render() {
   const page = trainingViews.has(view) ? trainingPage(view, ctx)
     : communityViews.has(view) ? communityPage(view, ctx)
     : view === 'world' ? factoryPage(ctx)
+    : view === 'shop' ? shopPage(ctx)
     : ({ start: startPage, create: creatorPage, hall: hallPage, account: accountPage, online: onlinePage }[view])();
   app.innerHTML = shell(typeof page === 'string' ? page : '', guest);
   const panel = document.querySelector('#main');
   if (typeof page !== 'string' && page) panel.append(page);
   if (trainingViews.has(view)) bindTraining(panel, view, ctx);
   if (communityViews.has(view)) bindCommunity(panel, view, ctx);
+  if (view === 'shop') bindShop(panel, ctx);
   if (view === 'world') disposeFactoryPage = bindFactoryPage(panel, ctx);
   if (view === 'online' && cloud.meta()) drawWorld();
 }
