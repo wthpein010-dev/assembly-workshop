@@ -2,7 +2,7 @@ import { escapeHtml as esc, loadSave, persistSave, normalizeSave, initialState, 
 import { apiOrigin, makeCloud } from './cloud.js?v=avatar1';
 import { makeSocial } from './social-client.js';
 import { normalizeAvatar, PRESET_AVATARS } from './avatar-catalog.js';
-import { loadedSection, loadSection, sectionForView, sectionReady } from './route-assets.js';
+import { loadedSection, loadSection, sectionForView, sectionReady } from './route-assets.js?v=robot1';
 import { stopPageMotion, switchPage } from './route-motion.js';
 
 const app = document.querySelector('#app');

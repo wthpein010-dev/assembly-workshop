@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from './vendor/three/addons/loaders/GLTFLoader.js';
-import { createFactoryActivity } from './factory-activity.js';
+import { createFactoryActivity } from './factory-activity.js?v=robot1';
 import { createRecoverySimulation } from './factory-recovery.js';
-import { createRecoveryVisuals } from './factory-recovery-view.js';
+import { createRecoveryVisuals } from './factory-recovery-view.js?v=robot1';
 import { loadFactoryAssets } from './factory-assets.js';
 import {
   BENCH_RANGE, EYE_HEIGHT, benchCameraPose, clamp, dampOverview, movementVector, movePlayer,

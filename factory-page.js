@@ -496,7 +496,7 @@ export function bindFactoryPage(root, ctx) {
     const resources = loadFactoryAssets(workerProfile, controller.signal, updateProgress);
     resources.catch(() => {});
     try {
-      const { createFactoryScene } = await import('./factory-view.js?v=motion1');
+      const { createFactoryScene } = await import('./factory-view.js?v=robot1');
       if (!active()) return;
       scene = createFactoryScene(canvas, {
         recovery: recoveryProgress,

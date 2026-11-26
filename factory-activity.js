@@ -97,10 +97,31 @@ export function createFactoryActivity(scene, layout, { reducedMotion = false } =
   const boot = material(0x232933);
   const metal = material(0x9ca9b7, .46, .43);
   const motor = material(0x435265, .58, .43);
-  const casing = material(0xdf914d, .21, .46);
+  const armEnamel = material(0xc8ced0, .27, .36);
+  const gasket = material(0x242e35, .1, .61);
+  const safetyOrange = material(0xdc773b, .2, .45);
+  const lensGlass = material(0x184558, .23, .2);
   const cardboard = material(0xab814e);
   const tape = material(0xe0c899);
   const crate = material(0x65839e);
+  const foundation = new THREE.CylinderGeometry(.45, .5, 1, 8);
+  const bolt = new THREE.CylinderGeometry(.5, .5, 1, 6);
+  const housing = new THREE.LatheGeometry([
+    [0, -.5], [.35, -.5], [.44, -.44], [.49, -.28], [.47, .28],
+    [.42, .46], [.32, .5], [0, .5],
+  ].map(([radius, height]) => new THREE.Vector2(radius, height)), 12);
+  const linkShell = new THREE.LatheGeometry([
+    [0, -.5], [.32, -.5], [.47, -.41], [.49, -.22], [.36, .24],
+    [.38, .41], [.30, .5], [0, .5],
+  ].map(([radius, height]) => new THREE.Vector2(radius, height)), 10);
+  const harness = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
+    new THREE.Vector3(.141, -.45, .03), new THREE.Vector3(.203, -.29, .033),
+    new THREE.Vector3(.193, .18, .03), new THREE.Vector3(.125, .44, .052),
+  ]), 10, .016, 5, false);
+  const fixtureTransform = new THREE.Matrix4();
+  const fixturePosition = new THREE.Vector3();
+  const fixtureScale = new THREE.Vector3(.064, .035, .064);
+  const identity = new THREE.Quaternion();
 
   function group(parent, name, x = 0, y = 0, z = 0) {
     const object = new THREE.Group();
@@ -124,6 +145,35 @@ export function createFactoryActivity(scene, layout, { reducedMotion = false } =
     part.position.copy(from).addScaledVector(axis, .5);
     part.scale.set(width, axis.length(), depth);
     part.quaternion.setFromUnitVectors(yAxis, axis.normalize());
+  }
+
+  function fasteners(parent) {
+    const hardware = new THREE.InstancedMesh(bolt, metal, 4);
+    hardware.name = 'Base anchor bolts';
+    let index = 0;
+    for (const x of [-.28, .28]) {
+      for (const z of [-.24, .24]) {
+        fixturePosition.set(x, .09, z);
+        hardware.setMatrixAt(index++, fixtureTransform.compose(fixturePosition, identity, fixtureScale));
+      }
+    }
+    parent.add(hardware);
+  }
+
+  function servo(parent, name, diameter, span) {
+    const joint = group(parent, name);
+    mesh(joint, 'Sealed servo barrel', 0, 0, 0, diameter, span, diameter, motor, cylinder);
+    mesh(joint, 'Encoder cover', 0, span / 2, 0, diameter * .87, .083, diameter * .87, safetyOrange, housing);
+    mesh(joint, 'Bearing plate', 0, -span / 2, 0, diameter * .78, .05, diameter * .78, safetyOrange, housing);
+    return joint;
+  }
+
+  function armLink(parent, name, width, depth) {
+    const assembly = group(parent, name);
+    mesh(assembly, 'Tapered cast shell', 0, 0, 0, width, .90, depth, armEnamel, linkShell);
+    mesh(assembly, 'Graphite seam', 0, -.20, 0, width * 1.014, .043, depth * 1.014, gasket, cylinder);
+    mesh(assembly, 'Shielded cable loom', 0, 0, 0, 1, 1, 1, gasket, harness);
+    return assembly;
   }
 
   const crew = group(scene, 'Factory crew');
@@ -208,29 +258,39 @@ export function createFactoryActivity(scene, layout, { reducedMotion = false } =
   const cells = lanes.map((lane, index) => {
     const cell = group(automation, `Automation cell ${index + 1}`);
     const root = group(cell, 'Robot pedestal', 26.1, armBase, lane.mount);
-    mesh(root, 'Base plate', 0, .075, 0, .8, .15, .72, motor);
-    mesh(root, 'Base motor', 0, .22, 0, .62, .24, .60, motor, cylinder);
+    mesh(root, 'Beveled base plate', 0, .04, 0, .92, .08, .81, motor, foundation);
+    fasteners(root);
+    mesh(root, 'Stationary drive enclosure', 0, .20, 0, .66, .27, .62, motor, housing);
+    mesh(root, 'Turntable bearing', 0, .33, 0, .58, .071, .56, gasket, cylinder);
     const turret = group(root, 'Robot turret');
-    mesh(turret, 'Swivel housing', 0, .388, 0, .55, .21, .52, casing, cylinder);
-    mesh(turret, 'Shoulder motor casing', 0, .56, 0, .48, .31, .40, casing, bevel);
-    const jointMesh = name => mesh(root, name, 0, 0, 0, .32, .27, .32, motor, cylinder);
-    const shoulderMotor = jointMesh('Shoulder joint');
-    const elbowMotor = jointMesh('Elbow joint');
-    const upper = mesh(root, 'Arm upper link', 0, 0, 0, .23, 1, .23, casing);
-    const forearm = mesh(root, 'Arm forearm', 0, 0, 0, .19, 1, .20, casing);
-    const drive = mesh(root, 'Arm linkage', 0, 0, 0, .084, 1, .099, metal, cylinder);
+    mesh(turret, 'Shoulder saddle', 0, .48, 0, .405, .32, .50, armEnamel, housing);
+    const shoulderMotor = servo(root, 'Shoulder joint', .44, .43);
+    const elbowMotor = servo(root, 'Elbow joint', .34, .36);
+    const upper = armLink(root, 'Arm upper link', .44, .36);
+    const forearm = armLink(root, 'Arm forearm', .33, .30);
     const tool = group(root, 'Tool head');
-    mesh(tool, 'Wrist motor', 0, .11, 0, .22, .21, .22, motor, cylinder);
-    mesh(tool, 'Gripper body', 0, -.011, 0, .24, .088, .37, metal);
+    const wrist = servo(tool, 'Wrist joint', .23, .24);
+    wrist.rotation.z = Math.PI / 2;
+    wrist.position.y = .102;
+    mesh(tool, 'Tool flange', 0, .029, 0, .235, .052, .235, metal, cylinder);
+    mesh(tool, 'Gripper actuator', 0, -.027, 0, .258, .087, .66, motor);
+    mesh(tool, 'Jaw guide rail', 0, -.063, 0, .17, .036, .71, metal);
+    const camera = group(tool, 'Package inspection camera', .181, -.016, .087);
+    mesh(camera, 'Camera enclosure', 0, 0, 0, .111, .10, .122, gasket);
+    mesh(camera, 'Optical glass', 0, -.048, 0, .081, .023, .081, lensGlass, cylinder);
+    const opticalLight = new THREE.MeshStandardMaterial({ color: 0x79e0dd, emissive: 0x39c9ca, emissiveIntensity: .16 });
+    mesh(camera, 'Vision status lamp', .054, .02, .037, .012, .018, .021, opticalLight);
     const jaws = [-1, 1].map(side => {
       const jaw = group(tool, 'Pallet gripper jaw');
-      mesh(jaw, 'Jaw carrier', 0, -.038, -side * .07, .09, .06, .25, metal);
-      mesh(jaw, 'Jaw pad', 0, -.10, 0, .112, .13, .058, boot);
+      mesh(jaw, 'Jaw carrier', 0, -.063, -side * .055, .103, .06, .178, metal);
+      mesh(jaw, 'Jaw finger', 0, -.135, .012 * side, .105, .154, .054, metal);
+      mesh(jaw, 'Jaw pad', 0, -.142, -.021 * side, .092, .11, .029, gasket);
       return jaw;
     });
-    const lamp = new THREE.MeshStandardMaterial({ color: 0xffcd7a, emissive: 0xffa52e, emissiveIntensity: .28 });
-    mesh(root, 'Robot indicator base', -.30, .21, -.205, .107, .26, .107, motor, cylinder);
-    mesh(root, 'Robot indicator lens', -.30, .37, -.205, .108, .089, .108, lamp, bevel);
+    const lamp = new THREE.MeshStandardMaterial({ color: 0x80aabf, emissive: 0x527d9a, emissiveIntensity: .29 });
+    mesh(root, 'Status beacon mount', -.31, .206, -.235, .096, .245, .096, motor, cylinder);
+    mesh(root, 'Status beacon lens', -.31, .355, -.235, .098, .092, .098, lamp, bevel);
+    mesh(root, 'Safety stop button', .292, .175, .241, .084, .058, .084, safetyOrange, cylinder);
 
     const parcels = [0, 1].map(parcelIndex => {
       const parcel = group(cell, `Belt parcel ${parcelIndex + 1}`, 0, beltTop, lane.belt);
@@ -240,23 +300,28 @@ export function createFactoryActivity(scene, layout, { reducedMotion = false } =
       mesh(parcel, 'Parcel label', .16, .315, .09, .131, .004, .105, reflection);
       return parcel;
     });
-    return { lane, root, turret, shoulderMotor, elbowMotor, upper, forearm, drive, tool, jaws, lamp, parcels };
+    return { lane, root, turret, shoulderMotor, elbowMotor, upper, forearm, tool, jaws, lamp, opticalLight, parcels };
   });
 
   function applyAutomation(cell, time) {
-    const { lane, root, turret, shoulderMotor, elbowMotor, upper, forearm, drive, tool, jaws, lamp, parcels } = cell;
-    let pickup = 0;
+    const { lane, root, turret, shoulderMotor, elbowMotor, upper, forearm, tool, jaws, lamp, opticalLight, parcels } = cell;
+    let tracking = 0;
+    let lowered = 0;
+    let grip = 0;
     let lift = 0;
     let workingX = root.position.x;
     for (const [index, parcel] of parcels.entries()) {
       const offset = (time * .69 + lane.offset + index * 2.75) % 5.5;
       const x = 23.25 + offset;
-      const approach = ease((x - 24.96) / .54) * ease((27.30 - x) / .54);
+      const approach = ease((x - 24.65) / .67) * ease((27.36 - x) / .65);
       const transfer = clamp((x - 25.65) / 1.0, 0, 1);
       const rise = Math.sin(transfer * Math.PI) ** 2 * .24;
-      if (approach > pickup) {
+      if (approach > tracking) {
         workingX = x;
-        pickup = approach;
+        tracking = approach;
+        lowered = ease((x - 25.13) / .42) * ease((27.03 - x) / .34);
+        // Close before the lift window and open only after the workpiece is down.
+        grip = ease((x - 25.35) / .27) * ease((26.95 - x) / .29);
         lift = rise;
       }
       parcel.position.set(x, beltTop + rise, lane.belt);
@@ -267,9 +332,9 @@ export function createFactoryActivity(scene, layout, { reducedMotion = false } =
 
     const shoulderHeight = .63;
     const travel = lane.belt - lane.mount;
-    const targetX = .22 * (1 - pickup) + (workingX - root.position.x) * pickup;
-    const targetY = 1.82 * (1 - pickup) + (beltTop + .42 + lift - armBase) * pickup;
-    const targetZ = .95 * (1 - pickup) + travel * pickup;
+    const targetX = .22 * (1 - tracking) + (workingX - root.position.x) * tracking;
+    const targetY = 1.82 * (1 - lowered) + (beltTop + .42 + lift - armBase) * lowered;
+    const targetZ = .95 * (1 - tracking) + travel * tracking;
     const reach = Math.hypot(targetX, targetZ);
     const yaw = Math.atan2(targetX, targetZ);
     const dy = targetY - shoulderHeight;
@@ -288,18 +353,20 @@ export function createFactoryActivity(scene, layout, { reducedMotion = false } =
     elbowMotor.position.copy(elbow);
     shoulderMotor.quaternion.setFromAxisAngle(yAxis, yaw).multiply(axle);
     elbowMotor.quaternion.copy(shoulderMotor.quaternion);
-    link(upper, shoulder, elbow, .23, .23);
-    link(forearm, elbow, hand, .18, .20);
-    shoulder.x += .16 * Math.cos(yaw);
-    shoulder.z -= .16 * Math.sin(yaw);
-    elbow.x += .16 * Math.cos(yaw);
-    elbow.z -= .16 * Math.sin(yaw);
-    link(drive, shoulder, elbow, .092, .092);
+    link(upper, shoulder, elbow, 1, 1);
+    link(forearm, elbow, hand, 1, 1);
     tool.position.copy(hand);
-    const spread = .47 - .157 * pickup;
+    tool.rotation.set(-.17 * (1 - lowered), yaw * (1 - tracking) * .65, 0, 'YXZ');
+    const spread = .432 - .117 * grip;
     jaws[0].position.z = -spread;
     jaws[1].position.z = spread;
-    lamp.emissiveIntensity = .24 + pickup * .46;
+    const scanning = tracking > .13 && grip < .98;
+    const transferring = grip >= .98;
+    const statusColor = transferring ? 0x75e5a1 : scanning ? 0xffad56 : 0x78aed1;
+    lamp.color.setHex(statusColor);
+    lamp.emissive.copy(lamp.color);
+    lamp.emissiveIntensity = transferring ? .60 : scanning ? .51 : .24;
+    opticalLight.emissiveIntensity = scanning ? .86 : .15;
   }
 
   let seconds = 0;

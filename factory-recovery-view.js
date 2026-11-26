@@ -6,11 +6,12 @@ const SIGNAL_BLUE = 0x66c9f5;
 const EQUIPMENT_ORANGE = 0xef8a4d;
 const AMBER = 0xffb65b;
 const GREEN = 0x76f593;
-const palettes = {
-  sweep: { width: .93, length: .83, eye: .77, top: .94, offset: .21 },
-  scan: { width: .75, length: .70, eye: 1.16, top: 1.37, offset: .14 },
-  dash: { width: .84, length: 1.02, eye: .87, top: 1.06, offset: .29 },
+const robotFrames = {
+  sweep: { width: .90, length: .87, sensorHeight: .70, bodyColor: 'painted', panelColor: 'stripe' },
+  scan: { width: .74, length: .76, sensorHeight: 1.11, bodyColor: 'pearl', panelColor: 'painted' },
+  dash: { width: .82, length: 1.00, sensorHeight: .77, bodyColor: 'panel', panelColor: 'stripe' },
 };
+const WHEEL_RADIUS = .144;
 
 const limit = (value, low, high) => Math.max(low, Math.min(high, value));
 const partId = part => typeof part === 'string' ? part : part?.id;
@@ -40,6 +41,7 @@ function createKit() {
     panel: metal(0x516b83, .35, .47), steel: metal(0xa7b2be, .63, .38), graphite: metal(0x586776, .52),
     stripe: metal(EQUIPMENT_ORANGE, .19, .39), painted: metal(0x426f94, .26, .42), circuit: metal(0x318067, .13),
     gold: metal(0xdc8645, .48, .38), pearl: metal(0xe4e0d6, .24), amber: led(AMBER, .39),
+    optic: metal(0x142e43, .68, .24), red: metal(0xb82d24, .16, .34),
     signal: led(SIGNAL_BLUE, .61), ready: led(GREEN, .85),
   };
   function mesh(group, material, x, y, z, w, h, d, geometry = box) {
@@ -97,86 +99,172 @@ function label(group, doc, name, tint, y, width = .88) {
   return sprite;
 }
 
+// Pack fixed details into one draw per material. Wheels, scanner and shutters remain articulated.
+function packRobotPanels(group) {
+  const batches = new Map();
+  for (const child of group.children) {
+    if (!child.isMesh) continue;
+    const batch = batches.get(child.material) ?? [];
+    batch.push(child);
+    batches.set(child.material, batch);
+  }
+  const point = new THREE.Vector3();
+  const normalMatrix = new THREE.Matrix3();
+  for (const [material, panels] of batches) {
+    if (panels.length < 2) continue;
+    const positions = [];
+    const normals = [];
+    for (const panel of panels) {
+      panel.updateMatrix();
+      normalMatrix.getNormalMatrix(panel.matrix);
+      const { index, attributes } = panel.geometry;
+      for (let i = 0; i < (index?.count ?? attributes.position.count); i++) {
+        const vertex = index ? index.getX(i) : i;
+        point.fromBufferAttribute(attributes.position, vertex).applyMatrix4(panel.matrix);
+        positions.push(point.x, point.y, point.z);
+        point.fromBufferAttribute(attributes.normal, vertex).applyNormalMatrix(normalMatrix);
+        normals.push(point.x, point.y, point.z);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = panels.find(panel => panel.name)?.name ?? '';
+    mesh.receiveShadow = material.isMeshStandardMaterial;
+    group.remove(...panels);
+    group.add(mesh);
+  }
+}
+
 function robotModel(bot, kit, doc) {
   const { mesh, flat, contact, shell, cylinder, hex, materials: m, glow, led } = kit;
-  const shape = palettes[bot.type] || palettes.sweep;
-  const { width, length, eye: eyeY, top, offset } = shape;
+  const shape = robotFrames[bot.type] || robotFrames.sweep;
+  const { width, length, sensorHeight, bodyColor, panelColor } = shape;
   const root = new THREE.Group();
   root.name = `fault-robot-${bot.id}`;
-  contact(root, width * 1.48, length * 1.54);
+  contact(root, width * 1.44, length * 1.51);
 
   const body = new THREE.Group();
+  body.name = 'industrial-chassis-housing';
   root.add(body);
-  mesh(body, m.runner, 0, .23, 0, width * .76, .31, length * .88, shell);
-  mesh(body, m.frame, 0, .46, -.045, width * .79, .40, length * .74, shell);
-  mesh(body, m.painted, 0, .57, length * .19, width * .69, .12, .24, shell);
-  const wheelPods = [];
+  mesh(body, m.runner, 0, .211, 0, width * .78, .234, length * .83, shell);
+  mesh(body, m.frame, 0, .343, 0, width * .96, .188, length * .96, shell);
+  mesh(body, m[bodyColor], 0, .449, -.018, width * .91, .222, length * .88, shell);
+  mesh(body, m.graphite, 0, .545, -.027, width * .88, .071, length * .82, shell);
+
+  const status = led(SIGNAL_BLUE, .94);
+  const wheels = [];
   for (const side of [-1, 1]) {
-    const pod = new THREE.Group();
-    pod.position.x = side * width * .38;
-    root.add(pod);
-    wheelPods.push(pod);
-    mesh(pod, m.runner, 0, .155, 0, .247, .315, length, shell);
-    mesh(pod, m.panel, side * .11, .155, 0, .045, .17, length * .77, shell);
-    for (const z of [-1, 1]) {
-      const rim = mesh(pod, m.graphite, side * .137, .151, z * length * .25, .181, .044, .181, cylinder);
-      rim.rotation.z = Math.PI / 2;
+    for (const end of [-1, 1]) {
+      const wheel = new THREE.Group();
+      wheel.name = 'rubber-drive-wheel';
+      wheel.position.set(side * width * .368, FLOOR + WHEEL_RADIUS, end * length * .298);
+      root.add(wheel);
+      wheels.push({ wheel, side });
+      mesh(wheel, m.runner, 0, 0, 0, WHEEL_RADIUS * 2, .102, WHEEL_RADIUS * 2, cylinder).rotation.z = Math.PI / 2;
+      mesh(wheel, m.graphite, side * .047, 0, 0, .168, .017, .168, hex).rotation.z = Math.PI / 2;
+      mesh(wheel, m.steel, side * .057, .032, .018, .011, .025, .016, shell);
     }
-    mesh(body, m.stripe, side * width * .36, .48, .015, .153, .223, length * .55, shell)
-      .rotation.z = side * -.24;
-  }
 
+    mesh(body, m[panelColor], side * width * .445, .454, .011, .079, .139, length * .57, shell);
+    mesh(body, status, side * width * .491, .483, .015, .011, .016, length * .39, shell);
+    mesh(body, m.dark, side * width * .450, .388, -length * .115, .069, .070, length * .30, shell);
+    for (const i of [-1, 0, 1]) mesh(body, m.graphite, side * width * .483, .388, -length * .115 + i * .051, .012, .041, .014);
+    // The offset protection scanners leave a bumper section on all four corners.
+    mesh(body, m.runner, side * width * .302, .209, side * length * .456, width * .246, .151, .156, shell);
+    mesh(body, m.optic, side * width * .302, .242, side * length * .504, width * .198, .062, .075, shell);
+    mesh(body, status, side * width * .321, .248, side * length * .545, .020, .018, .013, shell);
+  }
+  mesh(body, m.runner, 0, .217, length * .444, width * .80, .154, .141, shell);
+  mesh(body, m.frame, 0, .217, -length * .444, width * .80, .154, .141, shell);
+  mesh(body, m.dark, 0, .356, -length * .435, width * .344, .112, .079, shell);
+  for (const x of [-.071, .071]) mesh(body, m.gold, x, .351, -length * .479, .088, .030, .016, shell);
+  const stop = mesh(body, m.dark, -width * .333, .580, -length * .286, .126, .038, .126, cylinder);
+  stop.name = 'emergency-stop-mount';
+  mesh(body, m.red, -width * .333, .608, -length * .286, .072, .033, .072, cylinder);
+
+  const tool = new THREE.Group();
+  body.add(tool);
   if (bot.type === 'scan') {
-    mesh(body, m.steel, 0, .78, -.075, .29, .63, .27, shell);
-    mesh(body, m.painted, 0, .865, .032, .36, .26, .256, shell);
-    mesh(body, m.stripe, .13, top + .07, -.18, .025, .235, .028, cylinder).rotation.z = -.22;
-    mesh(body, m.amber, .15, top + .18, -.18, .067, .07, .067, hex);
+    tool.name = 'adjustable-inspection-mast';
+    mesh(body, m.dark, 0, .628, -.114, .33, .20, .28, shell);
+    mesh(body, m.steel, 0, .857, -.137, .210, .488, .191, shell);
+    for (const x of [-.078, .078]) mesh(body, m.frame, x, .851, -.032, .042, .419, .04, shell);
+    mesh(tool, m.pearl, 0, 1.005, -.137, .267, .181, .215, shell);
   } else if (bot.type === 'dash') {
+    tool.name = 'telescopic-feed-carriage';
     for (const side of [-1, 1]) {
-      mesh(body, m.stripe, .22 * side, .32, .42, .29, .22, .262, shell).rotation.y = .32 * side;
-      mesh(body, m.panel, .255 * side, .66, -.34, .19, .575, .28, shell).rotation.x = -.22;
+      mesh(body, m.graphite, .243 * side, .580, .015, .145, .102, .779, shell);
+      mesh(body, m.steel, .228 * side, .632, .061, .046, .043, .622, shell);
+      mesh(tool, m.panel, .229 * side, .648, .094, .103, .075, .403, shell);
     }
-    mesh(body, m.gold, 0, .56, -.34, .44, .1, .125, shell);
+    mesh(tool, m.stripe, 0, .659, .274, .543, .123, .132, shell);
+    mesh(tool, m.runner, 0, .659, .335, .456, .071, .044, shell);
   } else {
-    const roller = mesh(body, m.steel, 0, .272, .43, .16, .61, .16, cylinder);
-    roller.rotation.z = Math.PI / 2;
-    for (const x of [-.21, 0, .21]) {
-      mesh(body, m.painted, x, .272, .43, .198, .074, .198, cylinder).rotation.z = Math.PI / 2;
-    }
+    tool.name = 'cargo-roller-deck';
+    mesh(tool, m.dark, 0, .581, .074, .651, .090, .53, shell);
+    for (const z of [-.121, -.028, .065, .158, .251]) mesh(tool, m.steel, 0, .631, z, .075, .53, .075, cylinder).rotation.z = Math.PI / 2;
+    for (const side of [-1, 1]) mesh(tool, m.painted, side * .318, .633, .079, .081, .110, .563, shell);
   }
 
-  const head = new THREE.Group();
-  head.position.set(0, eyeY, bot.type === 'scan' ? .09 : -.022);
-  body.add(head);
-  const nose = bot.type === 'dash' ? .32 : .265;
-  const span = bot.type === 'scan' ? .48 : width * .77;
-  mesh(head, m.stripe, 0, .038, -.026, span, .32, .46, shell).rotation.x = -.14;
-  mesh(head, m.dark, 0, -.015, nose - .074, span * .83, .184, .171, shell);
-  const eye = led(SIGNAL_BLUE, .91);
-  const optic = mesh(head, eye, -offset * .68, -.011, nose + .01, .132, .058, .122, hex);
-  optic.rotation.x = Math.PI / 2;
-  mesh(head, m.steel, -offset * .68, -.011, nose + .044, .054, .012, .054, cylinder).rotation.x = Math.PI / 2;
-  mesh(head, eye, offset * .74, -.013, nose + .014, .119, .028, .026, shell).rotation.z = -.10;
-  mesh(head, m.pearl, 0, .108, .119, span * .59, .028, .108, shell);
-  mesh(body, m.dark, 0, .519, length * .451, .289, .143, .039, shell);
-  const core = led(SIGNAL_BLUE, .92);
-  mesh(body, core, 0, .515, length * .475, .104, .068, .12, hex).rotation.x = Math.PI / 2;
-  for (const x of [-.145, .145]) mesh(body, m.steel, x, .515, length * .481, .025, .069, .018, shell);
+  const sensor = new THREE.Group();
+  sensor.name = 'stereo-camera-and-lidar';
+  sensor.position.set(0, sensorHeight, bot.type === 'sweep' ? -.241 : -.164);
+  body.add(sensor);
+  const span = bot.type === 'scan' ? .355 : .275;
+  mesh(sensor, m.dark, 0, 0, 0, span, .146, .209, shell);
+  mesh(sensor, m[bodyColor], 0, .074, -.008, span * .91, .030, .202, shell);
+  mesh(sensor, m.optic, -.036, -.009, .109, span * .68, .065, .044, shell);
+  mesh(sensor, m.steel, -.076, -.009, .137, .055, .020, .055, cylinder).rotation.x = Math.PI / 2;
+  mesh(sensor, m.optic, -.076, -.009, .149, .032, .01, .032, cylinder).rotation.x = Math.PI / 2;
+  mesh(sensor, m.graphite, .008, -.009, .136, .046, .022, .042, shell);
+  mesh(sensor, status, .092, -.009, .128, .032, .015, .024, shell);
+  mesh(sensor, m.graphite, 0, .103, -.026, .176, .035, .176, cylinder);
+  const scanner = new THREE.Group();
+  scanner.name = 'rotating-lidar-cap';
+  scanner.position.set(0, .135, -.026);
+  sensor.add(scanner);
+  mesh(scanner, m.optic, 0, 0, 0, .152, .052, .152, cylinder);
+  mesh(scanner, m.graphite, 0, .025, 0, .155, .017, .155, cylinder);
+  mesh(scanner, status, 0, -.007, .073, .058, .019, .015, shell);
+
+  const hatchFront = length * .466;
+  const hatchY = .457;
+  const core = led(SIGNAL_BLUE, .91);
+  mesh(body, m.runner, 0, hatchY, hatchFront - .012, .364, .159, .083, shell);
+  mesh(body, m.steel, 0, hatchY + .069, hatchFront + .028, .329, .016, .039, shell);
+  mesh(body, m.steel, 0, hatchY - .062, hatchFront + .028, .329, .016, .039, shell);
+  const coreEmitter = mesh(body, core, 0, hatchY, hatchFront + .024, .097, .032, .097, hex);
+  coreEmitter.name = 'exposed-service-core';
+  coreEmitter.rotation.x = Math.PI / 2;
+  for (const x of [-.098, .098]) {
+    mesh(body, m.gold, x, hatchY, hatchFront + .022, .033, .08, .019, shell);
+    mesh(body, core, x * 1.35, hatchY, hatchFront + .022, .014, .052, .019, shell);
+  }
+  const doors = [-1, 1].map(side => {
+    const door = new THREE.Group();
+    door.name = 'core-service-shutter';
+    body.add(door);
+    mesh(door, m[bodyColor], 0, hatchY, hatchFront + .052, .148, .111, .052, shell);
+    mesh(door, m[panelColor], side * .037, hatchY, hatchFront + .083, .031, .069, .012, shell);
+    return { side, door };
+  });
 
   const field = new THREE.Group();
   field.name = 'shield';
-  field.position.set(0, eyeY - .14, length * .52 + .065);
+  field.position.set(0, hatchY + .054, length * .52 + .082);
   root.add(field);
   const shield = glow(SIGNAL_BLUE, .14);
   const edge = glow(SIGNAL_BLUE, .48);
   const spanField = width * .94;
-  mesh(field, shield, 0, .015, .024, spanField, .53, .036, shell);
+  mesh(field, shield, 0, 0, .018, spanField, .37, .026, shell);
   for (const side of [-1, 1]) {
-    mesh(field, edge, side * spanField * .443, .026, .049, .023, .37, .024, shell).rotation.z = side * .21;
-    mesh(field, shield, side * spanField * .50, .015, -.027, .21, .365, .024, shell).rotation.y = side * .63;
+    mesh(field, edge, side * spanField * .443, .014, .041, .019, .286, .024, shell).rotation.z = side * .21;
+    mesh(field, shield, side * spanField * .50, .015, -.027, .175, .255, .021, shell).rotation.y = side * .63;
   }
-  mesh(field, edge, 0, .264, .039, spanField * .60, .02, .022, shell);
-  mesh(field, edge, 0, -.223, .039, spanField * .60, .02, .022, shell);
+  mesh(field, edge, 0, .175, .039, spanField * .62, .015, .018, shell);
+  mesh(field, edge, 0, -.165, .039, spanField * .62, .015, .018, shell);
 
   const warning = new THREE.Group();
   warning.name = 'telegraph';
@@ -198,9 +286,10 @@ function robotModel(bot, kit, doc) {
   }
   const exposed = flat(root, glow(SIGNAL_BLUE, .68), FLOOR + .006, width * .79);
   exposed.name = 'exposed';
-  const tag = label(root, doc, bot.name, SIGNAL_BLUE, top + .36, 1.05);
-  return { root, body, head, wheelPods, field, shield, edge, eye, core, warning, warningMat, warningFill, exposed, tag,
-    signature: '', kick: 0, guarded: false };
+  const tag = label(root, doc, bot.name, SIGNAL_BLUE, sensorHeight + .51, 1.05);
+  for (const rigid of [body, tool, sensor, scanner, field]) packRobotPanels(rigid);
+  return { root, body, sensor, scanner, tool, wheels, doors, field, shield, edge, status, core, warning, warningMat, warningFill, exposed, tag,
+    signature: '', kick: 0, guarded: false, lastX: bot.x, lastZ: bot.z, lastYaw: bot.yaw || 0, hatchOpen: 0, scannerAngle: 0 };
 }
 
 function partModel(id, root, kit) {
@@ -368,39 +457,62 @@ function robotPose(model, bot, delta, time, player, reducedMotion) {
   const exposed = bot.phase === 'vulnerable' || bot.phase === 'recoil';
   const near = Math.hypot(player.x - bot.x, player.z - bot.z) < 4.1;
   const progress = limit(bot.phaseElapsed / (bot.phaseDuration || 1), 0, 1);
-  const phaseTone = disabled ? 0x344244 : telegraph || model.guarded && model.kick > 0 ? AMBER : SIGNAL_BLUE;
-  const signature = `${bot.phase}/${bot.x}/${bot.z}/${bot.yaw}/${near}/${model.kick > 0}`;
+  const yaw = bot.yaw || 0;
+  const phaseTone = disabled ? 0x66332b : exposed ? 0x9affdd
+    : telegraph || model.guarded && model.kick > 0 ? AMBER : SIGNAL_BLUE;
+  const signature = `${bot.phase}/${bot.x}/${bot.z}/${yaw}/${near}/${model.kick > 0}`;
   const changed = model.signature !== signature;
   model.signature = signature;
   model.root.position.set(bot.x, 0, bot.z);
-  model.root.rotation.y = bot.yaw || 0;
+  model.root.rotation.y = yaw;
   model.kick = Math.max(0, model.kick - delta * 3.6);
-  const kick = reducedMotion ? 0 : model.kick * Math.sin((1 - model.kick) * 6.1);
-  const idle = !reducedMotion && !disabled ? Math.sin(time * 2.15 + bot.x) : 0;
+  const kick = reducedMotion ? 0 : model.kick * Math.sin((1 - model.kick) * 4.5);
+  const idle = !reducedMotion && !disabled ? Math.sin(time * 1.35 + bot.x) : 0;
   const windup = !reducedMotion && telegraph ? progress ** 1.35 : 0;
-  model.body.position.set(-kick * .05, disabled ? -.072 : idle * .018 - windup * .041, -kick * .22 - windup * .063);
-  model.body.scale.y = disabled ? .77 : 1 + kick * .07 - windup * .04;
-  model.body.rotation.set(disabled ? .11 : kick * -.36 - windup * .16, idle * .012, disabled ? -.075 : kick * .19);
-  model.head.rotation.y = disabled ? -.19 : idle * .11;
-  model.wheelPods.forEach((pod, i) => { pod.rotation.z = kick * (i ? .055 : -.055); });
-  model.eye.color.set(phaseTone);
-  model.eye.emissive.set(disabled ? 0 : phaseTone);
-  model.eye.emissiveIntensity = telegraph ? .82 + windup * .74 : .88 + model.kick * .45;
-  model.core.color.set(disabled ? 0x3f554e : exposed ? 0x9affdd : 0x388677);
+  const travel = (bot.x - model.lastX) * Math.sin(yaw) + (bot.z - model.lastZ) * Math.cos(yaw);
+  const yawDelta = Math.atan2(Math.sin(yaw - model.lastYaw), Math.cos(yaw - model.lastYaw));
+  if (!reducedMotion && !disabled) {
+    const turn = limit(yawDelta, -.24, .24) * .27;
+    for (const { wheel, side } of model.wheels) {
+      wheel.rotation.x = (wheel.rotation.x + (travel - side * turn) / WHEEL_RADIUS) % (2 * Math.PI);
+    }
+  }
+  model.lastX = bot.x;
+  model.lastZ = bot.z;
+  model.lastYaw = yaw;
+
+  model.body.position.set(-kick * .021, disabled ? -.029 : idle * .004 - windup * .014, -kick * .072 - windup * .029);
+  model.body.rotation.set(disabled ? .033 : -kick * .09 - windup * .048, 0, disabled ? -.033 : kick * .051);
+  model.sensor.rotation.y = disabled ? -.11 : telegraph ? 0 : idle * (bot.type === 'scan' ? .26 : .12);
+  model.sensor.rotation.x = disabled ? .16 : -windup * .061;
+  if (!reducedMotion && !disabled) {
+    model.scannerAngle = (model.scannerAngle + delta * (telegraph ? 5 : bot.type === 'scan' ? 3.1 : 2)) % (2 * Math.PI);
+    model.scanner.rotation.y = model.scannerAngle;
+  }
+  if (bot.type === 'dash') model.tool.position.z = .129 * windup - kick * .053;
+  if (bot.type === 'scan') model.tool.position.y = .033 * windup;
+
+  const open = Number(exposed || disabled);
+  model.hatchOpen = reducedMotion || delta === 0 ? open : THREE.MathUtils.damp(model.hatchOpen, open, 29, delta);
+  for (const { side, door } of model.doors) door.position.x = side * (.076 + .121 * model.hatchOpen);
+  model.status.color.set(phaseTone);
+  model.status.emissive.set(disabled ? 0 : phaseTone);
+  model.status.emissiveIntensity = telegraph ? 1.05 + windup * .57 : .81 + model.kick * .29;
+  model.core.color.set(disabled ? 0x284944 : exposed ? 0xb9ffe7 : 0x388677);
   model.core.emissive.set(disabled ? 0 : SIGNAL_BLUE);
-  model.core.emissiveIntensity = exposed ? 1.43 + idle * .28 : .23;
+  model.core.emissiveIntensity = exposed ? 1.52 + idle * .14 : .18;
   model.field.visible = !disabled && !exposed;
   model.shield.color.set(phaseTone);
   model.edge.color.set(phaseTone);
-  model.shield.opacity = telegraph ? .18 + windup * .075 : .11 + model.kick * .21;
-  model.edge.opacity = telegraph ? .62 : .42 + model.kick * .31;
+  model.shield.opacity = telegraph ? .12 + windup * .061 : .045 + model.kick * .15;
+  model.edge.opacity = telegraph ? .62 : .28 + model.kick * .31;
   model.warning.visible = telegraph;
   model.warningMat.opacity = telegraph ? .31 + windup * .5 : 0;
   model.warningFill.opacity = telegraph ? .09 + windup * .16 : 0;
   model.exposed.visible = exposed;
   model.exposed.material.opacity = .66 + idle * .15;
   if (model.tag) model.tag.visible = !disabled && near;
-  return changed || model.kick > 0 || !reducedMotion && !disabled;
+  return changed || model.kick > 0 || Math.abs(open - model.hatchOpen) > .002 || !reducedMotion && !disabled;
 }
 
 export function createRecoveryVisuals(scene, simulation, { document: doc, reducedMotion = false, layout = simulation.layout } = {}) {

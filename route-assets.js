@@ -60,7 +60,7 @@ export function loadSection(section) {
   const [script, ...css] = sectionAssets[section];
   const attempt = attempts.get(section) ?? 0;
   attempts.set(section, attempt + 1);
-  const query = '?v=' + version + (attempt ? '&retry=' + attempt : '');
+  const query = '?v=' + (section === 'world' ? 'robot1' : version) + (attempt ? '&retry=' + attempt : '');
   const entry = script ? import('./' + script + query) : null;
   const promise = Promise.all([entry, ...css.map(loadStylesheet)])
     .then(([module]) => { modules.set(section, module); return module; })
