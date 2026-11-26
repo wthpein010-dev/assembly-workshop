@@ -7,8 +7,9 @@ const dist = join(project, 'dist', 'server');
 const safe = await readdir(join(project, 'assets'));
 const entries = [
   'index.html', 'app.js', 'state.js', 'config.js', 'cloud.js', 'styles.css',
+  'route-assets.js', 'route-motion.js', 'route-motion.css', 'interaction-effects.css',
   'training.js', 'training.css', 'community.js', 'community.css', 'community-play.css', 'online-play.css',
-  'factory-page.js', 'factory-page.css', 'factory-view.js', 'factory-motion.js', 'factory-activity.js', 'assets/factory-layout.json',
+  'factory-page.js', 'factory-page.css', 'factory-view.js', 'factory-assets.js', 'factory-motion.js', 'factory-activity.js', 'assets/factory-layout.json',
   'factory-workbenches.js', 'factory-workbenches.css',
   'factory-recovery.js', 'factory-recovery-view.js', 'factory-recovery-ui.js', 'factory-recovery.css',
   'shop-page.js', 'shop-catalog.js', 'shop.css',

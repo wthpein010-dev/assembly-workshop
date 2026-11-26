@@ -130,12 +130,14 @@ progress::-webkit-progress-bar { background: var(--line); }
   border-radius: var(--panel-radius);
   overflow: hidden;
 }
-.start-scene::before {
-  content: "";
+.start-art {
   position: absolute;
   z-index: -1;
-  inset: 0 0 0 47%;
-  background: url("./assets/cover.webp?v=ca1") 57% center / cover no-repeat;
+  inset: 0 0 0 auto;
+  inline-size: 53%;
+  block-size: 100%;
+  object-fit: cover;
+  object-position: 57% center;
   border-inline-start: 1px solid var(--line);
 }
 .start-hero { inline-size: 43%; }
@@ -276,12 +278,11 @@ progress::-webkit-progress-bar { background: var(--line); }
 .training-hero-progress, .training-metrics dt { color: var(--muted); }
 .training-page .training-result-cover .training-replay-goal { color: var(--mint); }
 .training-mission-art, .training-mission--locked .training-mission-art {
-  background: linear-gradient(170deg, #11243994, #11243905 72%),
-    var(--training-scene) center 48% / cover no-repeat, var(--steel);
+  --mission-shade: linear-gradient(170deg, #11243994, #11243905 72%);
+  background: var(--steel);
 }
 .training-mission--locked .training-mission-art {
-  background: linear-gradient(#293d5190, #293d5170),
-    var(--training-scene) center 48% / cover no-repeat, var(--steel);
+  --mission-shade: linear-gradient(#293d5190, #293d5170);
 }
 .training-mission-type, .training-mission-status { background: var(--ink); border-color: var(--line); }
 .training-mission-body { padding: 1rem; }
@@ -435,12 +436,13 @@ progress::-webkit-progress-bar { background: var(--line); }
     gap: .75rem;
     padding-block-start: calc(var(--start-photo-height) + .85rem);
   }
-  .start-scene::before {
+  .start-art {
     inset: 0 0 auto;
+    inline-size: 100%;
     block-size: var(--start-photo-height);
     border-inline-start: 0;
     border-block-end: 1px solid var(--line);
-    background-position: center 48%;
+    object-position: center 48%;
   }
   .start-hero { inline-size: 100%; padding-block: .3rem; }
   .start-hero h1 { font-size: clamp(2.55rem, 10vw, 4.35rem); }

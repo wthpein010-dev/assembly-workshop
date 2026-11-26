@@ -1,4 +1,4 @@
-import { newCommunity, shopFriendName, shopFriends, updateCommunity } from './community.js';
+import { newCommunity, shopFriendName, shopFriends, updateCommunity } from './community.js?v=motion1';
 import {
   SHOP_CATEGORIES, SHOP_GIFT_NOTES, SHOP_ITEMS, SHOP_ORDER_STATUS, isShopRedeemed, getShopOrders, listShopProducts,
 } from './shop-catalog.js';
@@ -17,9 +17,9 @@ function model(ctx) {
   return { state, community, guest: !state.profile, section: Object.hasOwn(sections, requested) ? requested : 'exchange' };
 }
 
-function image(ctx, id, { alt = '', loading = 'lazy', fallback = 'shop', className = '' } = {}) {
+function image(ctx, id, { alt = '', loading = 'lazy', fallback = 'shop', className = '', priority = 'auto' } = {}) {
   const e = ctx.escape;
-  return `<img${className ? ` class="${className}"` : ''} src="${e(ctx.asset(id || fallback))}" data-shop-fallback="${e(ctx.asset(fallback))}" alt="${e(alt)}" loading="${loading}" decoding="async">`;
+  return `<img${className ? ` class="${className}"` : ''} src="${e(ctx.asset(id || fallback))}" data-shop-fallback="${e(ctx.asset(fallback))}" alt="${e(alt)}" loading="${loading}" decoding="async" fetchpriority="${priority}">`;
 }
 
 function price(item) {
@@ -36,7 +36,7 @@ function productCard(item, ctx, { state, community, guest }, gifting = false) {
   const e = ctx.escape;
   const redeemed = !gifting && isShopRedeemed(community, item.id);
   const badge = redeemed ? '已兑换' : item.kind === 'physical' ? '实物演示' : '';
-  const images = image(ctx, item.asset, { alt: item.name, fallback: gifting ? 'gift' : 'shop' });
+  const images = image(ctx, item.asset, { alt: item.name, fallback: gifting ? 'gift' : 'shop', priority: 'low' });
   return `<article class="shop-card">
     ${productButton(item, gifting, `${images}${badge ? `<span class="shop-card-state">${badge}</span>` : ''}`, 'shop-card-media')}
     <div class="shop-card-body">
@@ -61,7 +61,7 @@ function exchange(ctx, data) {
   return `<section class="shop-banner" aria-labelledby="shop-featured-title">
     <div class="shop-banner-copy"><h2 id="shop-featured-title">车间好物</h2><p>从随身保温壶到工友感谢卡，挑一件用积分兑换。</p>
       <button type="button" class="btn btn-primary" data-shop-feature="physical">查看实物奖励</button></div>
-    ${image(ctx, 'shop-banner', { loading: 'eager', className: 'shop-banner-art' })}
+    ${image(ctx, 'shop-banner', { loading: 'eager', className: 'shop-banner-art', priority: 'high' })}
   </section>
   <section class="shop-shelf" id="shop-shelf" aria-label="积分商品">
     <div class="shop-toolbar">

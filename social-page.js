@@ -30,9 +30,9 @@ function timeMarkup(value) {
     : '';
 }
 
-function giftArt(ctx, gift, cssClass = '') {
+function giftArt(ctx, gift, cssClass = '', loading = 'lazy') {
   return gift?.asset
-    ? `<img class="${cssClass}" src="${ctx.escape(ctx.asset(gift.asset))}" alt="" width="64" height="64" decoding="async">`
+    ? `<img class="${cssClass}" src="${ctx.escape(ctx.asset(gift.asset))}" alt="" width="64" height="64" decoding="async" loading="${loading}">`
     : '';
 }
 
@@ -42,7 +42,7 @@ function featureMarkup(ctx, board) {
   const { from, to } = event;
   const gift = SOCIAL_GIFTS[event.giftId];
   return `<div class="plaza-feature-event">
-    ${giftArt(ctx, gift, 'plaza-feature-gift')}
+    ${giftArt(ctx, gift, 'plaza-feature-gift', 'eager')}
     <div><p><strong>${ctx.escape(personName(from))}</strong> 送给 <strong>${ctx.escape(personName(to))}</strong></p>
       <p class="plaza-feature-name">${ctx.escape(gift?.name ?? '工坊礼物')}</p></div>
     <div class="plaza-feature-people">${avatar(ctx, from)}${avatar(ctx, to)}</div>
@@ -122,7 +122,7 @@ export function socialPage(ctx) {
     <header class="plaza-header"><div><h1>社交广场</h1><p>和工友聊天、送礼，看看大家最近的广场动态。</p></div>
       <nav aria-label="工友活动"><a href="#friends">工友名录</a><a href="#online">联机大厅</a><a href="#team">组队训练</a><a href="#help">工友求助</a></nav></header>
     <section class="plaza-feature" aria-labelledby="plaza-feature-title">
-      <img class="plaza-feature-backdrop" src="${ctx.escape(ctx.asset('social'))}" alt="">
+      <img class="plaza-feature-backdrop" src="${ctx.escape(ctx.asset('social'))}" alt="" decoding="async" fetchpriority="high">
       <div class="plaza-feature-content"><h2 id="plaza-feature-title">工坊电视</h2>
         <div data-sp-feature>${featureMarkup(ctx, board)}</div></div>
     </section>
@@ -162,7 +162,7 @@ export function socialPage(ctx) {
       <form class="plaza-gift-form" data-sp-gift-form novalidate>
         <header class="plaza-gift-header"><div><h2 id="plaza-gift-title">送一份礼物</h2><p id="plaza-gift-recipient" data-sp-recipient></p></div>
           <button class="btn btn-secondary" type="button" data-sp-close aria-label="关闭礼物选择">×</button></header>
-        <fieldset class="plaza-gift-options"><legend>选择礼物</legend>${giftOptions(ctx)}</fieldset>
+        <fieldset class="plaza-gift-options" data-sp-gift-options><legend>选择礼物</legend></fieldset>
         <footer class="plaza-gift-footer"><p class="plaza-form-status" role="status" data-sp-gift-status></p><button class="btn btn-primary" type="submit">确认送礼</button></footer>
       </form>
     </dialog>
@@ -192,6 +192,7 @@ export function bindSocialPage(root, ctx) {
   const messageStatus = select('message-status');
   const dialog = select('dialog');
   const giftForm = select('gift-form');
+  const giftChoices = select('gift-options');
   const giftButton = giftForm.querySelector('[type="submit"]');
   const giftStatus = select('gift-status');
   const tabs = [...page.querySelectorAll('[data-sp-ranking]')];
@@ -284,6 +285,7 @@ export function bindSocialPage(root, ctx) {
     giftTarget = player.id;
     select('recipient').textContent = '送给 ' + personName(player);
     giftStatus.textContent = '';
+    if (!giftChoices.querySelector('input')) giftChoices.insertAdjacentHTML('beforeend', giftOptions(ctx));
     giftForm.reset();
     sync();
     dialog.showModal();

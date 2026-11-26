@@ -357,7 +357,7 @@ function socialPage(c, e, ctx) {
 
 function handoffTool(id, ctx) {
   const tool = handoffTools[id];
-  return `<span class="co-tool-image" data-tool="${id}" aria-hidden="true">${tool.asset ? `<img src="${ctx.escape(ctx.asset(tool.asset))}" alt="" draggable="false">` : `<b>${tool.code}</b>`}</span><strong>${tool.name}</strong>`;
+  return `<span class="co-tool-image" data-tool="${id}" aria-hidden="true">${tool.asset ? `<img src="${ctx.escape(ctx.asset(tool.asset))}" alt="" draggable="false" decoding="async">` : `<b>${tool.code}</b>`}</span><strong>${tool.name}</strong>`;
 }
 
 function activeHandoff(team, ctx) {
@@ -462,7 +462,7 @@ function helpPage(c, e) {
 }
 
 function collectibleArt(item, ctx) {
-  return item?.price ? `<span class="co-item-icon co-item-photo"><img src="${ctx.escape(ctx.asset(item.asset))}" loading="lazy" alt=""></span>`
+  return item?.price ? `<span class="co-item-icon co-item-photo"><img src="${ctx.escape(ctx.asset(item.asset))}" loading="lazy" decoding="async" alt=""></span>`
     : `<span class="co-item-icon" aria-hidden="true">${item?.icon ?? '◇'}</span>`;
 }
 

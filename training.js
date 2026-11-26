@@ -316,7 +316,8 @@ function missionCard(track, mission, ctx) {
   const note = !available ? `完成「${missionById(mission.requires).title}」后解锁`
     : `首通奖励　${mission.xp} XP · ${mission.coins} 工票`;
   return `<article class="training-mission${available ? '' : ' training-mission--locked'}">
-    <div class="training-mission-art" style="--training-scene:url('${ctx.asset(mission.image)}')">
+    <div class="training-mission-art">
+      <img src="${ctx.asset(mission.image)}" alt="" loading="lazy" decoding="async">
       <span class="training-mission-type">${mission.kind} · ${mission.code}</span>
       <span class="training-mission-status${completed ? ' training-mission-status--done' : ''}">${status}</span>
     </div>
@@ -387,7 +388,7 @@ function workbenchStreak(run) {
 }
 
 function workbenchPart(asset, ctx) {
-  return asset ? `<img src="${ctx.asset(asset)}" alt="" draggable="false">`
+  return asset ? `<img src="${ctx.asset(asset)}" alt="" draggable="false" decoding="async">`
     : '<span class="training-prop-paper" aria-hidden="true"></span>';
 }
 

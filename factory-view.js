@@ -3,6 +3,7 @@ import { GLTFLoader } from './vendor/three/addons/loaders/GLTFLoader.js';
 import { createFactoryActivity } from './factory-activity.js';
 import { createRecoverySimulation } from './factory-recovery.js';
 import { createRecoveryVisuals } from './factory-recovery-view.js';
+import { loadFactoryAssets } from './factory-assets.js';
 import {
   BENCH_RANGE, EYE_HEIGHT, benchCameraPose, clamp, dampOverview, movementVector, movePlayer,
   nearbyBench, nearestStandable, overviewDistance, sampleCameraTransition, shiftOverview,
@@ -17,7 +18,6 @@ const FACTORY_AZIMUTH = Math.atan2(30, 42);
 const CLOSE_OVERVIEW = 0.29;
 const FAR_OVERVIEW = 1.24;
 const WALK_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']);
-const ASSETS = ['factory.glb', 'worker-hero.glb', 'factory-layout.json'];
 
 // Layout headings follow Three's initial view toward -Z. The worker model faces +Z.
 const layoutHeading = yaw => wrapAngle(Math.PI - (yaw || 0));
@@ -37,38 +37,6 @@ function validateLayout(layout) {
     throw new Error('车间地图数据无法读取。');
   }
   return layout;
-}
-
-async function fetchAsset(url, signal, progress) {
-  const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error(`无法加载车间资源（${response.status}）`);
-  const length = Number(response.headers.get('content-length'));
-  if (!response.body || !(length > 0)) {
-    const bytes = await response.arrayBuffer();
-    progress(1);
-    return bytes;
-  }
-
-  const parts = [];
-  let loaded = 0;
-  const reader = response.body.getReader();
-  try {
-    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-      parts.push(chunk.value);
-      loaded += chunk.value.byteLength;
-      progress(Math.min(0.98, loaded / length));
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(loaded);
-  let offset = 0;
-  for (const part of parts) {
-    bytes.set(part, offset);
-    offset += part.byteLength;
-  }
-  progress(1);
-  return bytes.buffer;
 }
 
 function disposeScene(root) {
@@ -388,7 +356,7 @@ function addInteriorEnvelope(scene, { bounds, spawn }) {
 
 export function createFactoryScene(canvas, options = {}) {
   const {
-    assetUrl = name => `./assets/${name}${name.endsWith('.glb') ? '?v=ca1' : ''}`,
+    assetUrl, resources,
     onProgress, onReady, onMode, onZone, onStatus, onInteract,
     onBenchNearby, onBench, recovery: initialRecovery, onRecovery, onRecoveryView, workerProfile,
   } = options;
@@ -1090,16 +1058,10 @@ export function createFactoryScene(canvas, options = {}) {
     renderer.shadowMap.autoUpdate = false;
     installControls();
     resize();
-    onProgress?.(0);
-
-    const urls = ASSETS.map((name, index) => assetUrl(index === 1 && workerProfile?.gender === 'female' ? 'worker-hero-female.glb' : name));
-    const weights = [0.85, 0.12, 0.03];
-    const progress = [0, 0, 0];
-    const [factoryBytes, heroBytes, layoutBytes] = await Promise.all(urls.map((url, index) =>
-      fetchAsset(url, abort.signal, value => {
-        progress[index] = value;
-        if (!destroyed) onProgress?.(0.94 * progress.reduce((total, part, piece) => total + part * weights[piece], 0));
-      })));
+    if (!resources) onProgress?.(0);
+    const { urls, bytes: [factoryBytes, heroBytes, layoutBytes] } = await (
+      resources ?? loadFactoryAssets(workerProfile, abort.signal, onProgress, assetUrl)
+    );
     if (destroyed) return null;
     const map = validateLayout(JSON.parse(new TextDecoder().decode(layoutBytes)));
     const spawn = nearestStandable(map.spawn, map);

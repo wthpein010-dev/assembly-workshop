@@ -1,0 +1,163 @@
+:root {
+  --interaction-press: 85ms;
+  --interaction-lift: 170ms;
+  --interaction-enter: 260ms;
+  --interaction-settle: cubic-bezier(.2, .75, .2, 1);
+}
+
+:is(.btn, .choice, .primary-nav a, .guest-login, .top-profile a, .factory-modes button,
+  .factory-directory button, .factory-social-toggle, .factory-social-option, .factory-social-send,
+  .fwb-arrows button, .avatar-studio button, .shop-nav button, .shop-categories button,
+  .shop-dialog-close, .plaza-rank-tabs button, .plaza-gift-option, .plaza-header nav a,
+  .co-tabs button, .co-toolbar button) {
+  transition: translate var(--interaction-lift) var(--interaction-settle),
+    scale var(--interaction-lift) var(--interaction-settle),
+    background-color var(--interaction-lift) ease-out,
+    border-color var(--interaction-lift) ease-out,
+    color var(--interaction-lift) ease-out,
+    box-shadow var(--interaction-lift) ease-out;
+}
+
+.btn:hover:not(:disabled) { transform: none; }
+.btn-primary:where(:not(:disabled, [aria-disabled="true"])) {
+  box-shadow: 0 2px 0 #6c361f38, inset 0 1px 0 #ffffff46;
+}
+
+:is(.btn, .choice, .primary-nav a, .top-profile a, .avatar-studio button, .shop-categories button,
+  .shop-nav button, .shop-dialog-close, .plaza-rank-tabs button, .plaza-gift-option, .co-tabs button,
+  .co-toolbar button, .fwb-arrows button, .factory-modes button, .factory-directory button,
+  .factory-social-toggle, .factory-social-option, .factory-social-send):not(:disabled, [aria-disabled="true"], [draggable="true"]):active {
+  translate: var(--interaction-down, 0 1px);
+  scale: var(--interaction-compress, .978);
+  box-shadow: inset 0 1px 3px #1026393d;
+  transition-duration: var(--interaction-press);
+}
+
+:is(.btn, .choice, .avatar-tile, .factory-directory button, .plaza-gift-option):focus-visible {
+  outline-offset: 3px;
+}
+
+.primary-nav a::after {
+  content: "";
+  position: absolute;
+  inset: auto 10px 0;
+  height: 3px;
+  background: var(--work-orange);
+  scale: .35 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: scale var(--interaction-enter) var(--interaction-settle), opacity var(--interaction-lift) ease-out;
+}
+.primary-nav a[aria-current="page"]::after { scale: 1; opacity: 1; }
+
+:is(.bay-link, .mile, .start-chapters a, .shop-card) {
+  transition: translate var(--interaction-lift) var(--interaction-settle),
+    border-color var(--interaction-lift) ease-out,
+    box-shadow var(--interaction-lift) ease-out;
+}
+
+.shop-card:focus-within { border-color: var(--focus); }
+.avatar-tile[aria-pressed="true"] { box-shadow: inset 0 -2px 0 var(--work-orange); }
+
+@media (hover: hover) and (pointer: fine) {
+  :is(.btn, .choice, .avatar-tile, .factory-directory button, .plaza-gift-option, .fwb-arrows button,
+    .factory-social-toggle, .factory-social-send):where(:not(:disabled, [aria-disabled="true"], [draggable="true"], :active)):hover {
+    translate: var(--interaction-over, 0 -1px);
+  }
+  .btn-primary:where(:not(:disabled, [aria-disabled="true"], :active)):hover {
+    box-shadow: 0 3px 0 #6c361f38, 0 5px 9px #371b171f, inset 0 1px 0 #ffffff65;
+  }
+  .primary-nav a:not([aria-current="page"]):hover::after { scale: .65 1; opacity: .55; }
+  :is(.bay-link, .mile, .start-chapters a, .shop-card):hover {
+    translate: var(--interaction-card-over, 0 -2px);
+    box-shadow: 0 7px 17px #18344d20;
+  }
+  :is(.bay-link, .mile, .start-chapters a):active { translate: var(--interaction-down, 0 1px); }
+  .avatar-tile .avatar-tile-art > .portrait { transition: scale var(--interaction-enter) var(--interaction-settle); }
+  .avatar-tile:hover .avatar-tile-art > .portrait { scale: var(--interaction-avatar-over, 1.035); }
+}
+
+:is(.shop-dialog, .plaza-gift-dialog)[open] {
+  animation: interaction-dialog-in var(--interaction-enter) var(--interaction-settle) both;
+}
+:is(.shop-dialog, .plaza-gift-dialog)[open]::backdrop {
+  animation: interaction-dim var(--interaction-enter) ease-out both;
+}
+.shop-dialog[open] .shop-dialog-body,
+[data-shop-content] > .shop-pane,
+.avatar-studio-panel:not([hidden]),
+.factory-social-panel:not([hidden]),
+[data-sp-rank] > .plaza-podium {
+  animation: interaction-panel-in 210ms var(--interaction-settle) both;
+}
+
+.toast { border-inline-start: 3px solid var(--work-orange); }
+.toast.visible { animation: interaction-notice-in 290ms var(--interaction-settle) both; }
+.toast.visible::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  block-size: 1px;
+  background: linear-gradient(90deg, var(--work-orange), transparent 85%);
+  pointer-events: none;
+  animation: interaction-confirm-line 480ms ease-out both;
+}
+.training-result-cover:not(.training-result-cover--failed) .training-score,
+.fwb-result dd {
+  transform-origin: left center;
+  animation: interaction-reward-in 340ms var(--interaction-settle) both;
+}
+.plaza-form-status[data-kind="success"] { animation: interaction-dim 220ms ease-out both; }
+
+@keyframes interaction-dialog-in {
+  from { opacity: .35; translate: 0 8px; scale: .982; }
+  to { opacity: 1; translate: none; scale: none; }
+}
+@keyframes interaction-dim {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes interaction-panel-in {
+  from { opacity: .65; translate: 0 5px; }
+  to { opacity: 1; translate: none; }
+}
+@keyframes interaction-notice-in {
+  from { opacity: 0; translate: 0 10px; }
+  60% { translate: 0 -2px; }
+  to { opacity: 1; translate: none; }
+}
+@keyframes interaction-confirm-line {
+  from { opacity: 1; clip-path: inset(0 100% 0 0); }
+  55% { opacity: 1; clip-path: inset(0); }
+  to { opacity: .25; clip-path: inset(0); }
+}
+@keyframes interaction-reward-in {
+  from { opacity: .5; scale: .94; }
+  68% { opacity: 1; scale: 1.037; }
+  to { opacity: 1; scale: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --interaction-down: none;
+    --interaction-compress: none;
+    --interaction-over: none;
+    --interaction-card-over: none;
+    --interaction-avatar-over: none;
+  }
+  .toast { transform: none; }
+  :is(.shop-dialog, .plaza-gift-dialog)[open],
+  :is(.shop-dialog, .plaza-gift-dialog)[open]::backdrop,
+  .shop-dialog[open] .shop-dialog-body,
+  [data-shop-content] > .shop-pane,
+  .avatar-studio-panel:not([hidden]),
+  .factory-social-panel:not([hidden]),
+  [data-sp-rank] > .plaza-podium,
+  .toast.visible, .toast.visible::before,
+  .training-result-cover:not(.training-result-cover--failed) .training-score,
+  .fwb-result dd,
+  .plaza-form-status[data-kind="success"] {
+    animation: none;
+  }
+}

@@ -1,18 +1,13 @@
 import { escapeHtml as esc, loadSave, persistSave, normalizeSave, initialState, profileFrom, validName, levelAt, FACE_LABELS, HAIR_LABELS, TONES, WORK_GROUPS } from './state.js?v=avatar1';
 import { apiOrigin, makeCloud } from './cloud.js?v=avatar1';
-import { trainingPage, bindTraining } from './training.js';
-import { communityPage, bindCommunity } from './community.js?v=social1';
-import { factoryPage, bindFactoryPage } from './factory-page.js?v=social1';
-import { shopPage, bindShop } from './shop-page.js?v=social1';
 import { makeSocial } from './social-client.js';
-import { socialPage, bindSocialPage } from './social-page.js';
 import { normalizeAvatar, PRESET_AVATARS } from './avatar-catalog.js';
-import { avatarStudioMarkup, bindAvatarStudio } from './avatar-studio.js';
+import { loadedSection, loadSection, sectionForView, sectionReady } from './route-assets.js';
+import { stopPageMotion, switchPage } from './route-motion.js';
 
 const app = document.querySelector('#app');
 const notice = document.querySelector('#notice');
-const trainingViews = new Set(['missions', 'station', 'record']);
-const communityViews = new Set(['friends', 'team', 'help', 'honor', 'event']);
+const routeLoading = document.querySelector('#route-loading');
 const viewNames = { hall: '任务大厅', world: '工坊地图', missions: '任务手册', station: '模拟工位', record: '技能记录', social: '社交广场', friends: '工友名录', team: '组队训练', help: '求助板', shop: '积分兑换店', honor: '我的工位', event: '工坊建设周', online: '联机大厅', account: '角色与存档', create: '创建角色', avatar: '修改头像', start: '装配工坊' };
 const cloudStatus = { local: '本地存档', connecting: '连接中', ready: '云档已同步', saving: '正在同步', conflict: '待处理云档', offline: '云档暂未连接' };
 const roles = [ '身份绑定', '定制角色', '角色取名' ];
@@ -23,6 +18,10 @@ const coopSteps = [
 ];
 let state = loadSave(localStorage);
 let view = '';
+let previousView = '';
+let routeError = false;
+let navigationId = 0;
+let loadingTimer;
 let disposePage;
 let toastTimer;
 let step = 0;
@@ -80,28 +79,97 @@ function commit(mutator, { renderPage = true } = {}) {
 }
 
 function go(route) {
-  if (!(route in viewNames)) route = 'hall';
+  if (!Object.hasOwn(viewNames, route)) route = 'hall';
   if (location.hash.slice(1) === route) { changeRoute(); return; }
   location.hash = route;
 }
 
 const ctx = { state: () => state, commit, go, toast, escape: esc, asset, portrait, social };
 
-function changeRoute() {
-  const requested = location.hash.slice(1);
+function resolveView(requested) {
   const route = Object.hasOwn(viewNames, requested) ? requested : state.profile ? 'hall' : 'start';
-  view = state.profile || ['start', 'create', 'account', 'world', 'shop', 'social'].includes(route) ? route : 'start';
-  if (view === 'avatar') avatarDraft = profileFrom(state.profile);
-  clearInterval(worldTimer);
+  return state.profile || ['start', 'create', 'account', 'world', 'shop', 'social'].includes(route) ? route : 'start';
+}
 
-  render();
-  if (view === 'online' && cloud.meta()) {
-    refreshWorld();
-    worldTimer = setInterval(() => { if (!document.hidden && view === 'online') refreshWorld(); }, 4500);
+function clearLoading() {
+  clearTimeout(loadingTimer);
+  routeLoading.hidden = true;
+  app.removeAttribute('aria-busy');
+}
+
+function beginNavigation() {
+  clearLoading();
+  stopPageMotion();
+  return ++navigationId;
+}
+
+async function prepareNavigation(section, label) {
+  app.setAttribute('aria-busy', 'true');
+  loadingTimer = setTimeout(() => {
+    routeLoading.querySelector('span').textContent = '正在打开' + label + '…';
+    routeLoading.hidden = false;
+  }, 130);
+  await loadSection(section);
+}
+
+async function changeRoute() {
+  const ticket = beginNavigation();
+  const target = resolveView(location.hash.slice(1));
+  const section = sectionForView(target, step);
+  let failed = false;
+  if (!sectionReady(section)) {
+    try { await prepareNavigation(section, viewNames[target]); }
+    catch { failed = true; }
   }
-  document.title = viewNames[view] + ' · 装配工坊';
-  window.scrollTo(0, 0);
-  app.querySelector('main')?.focus({ preventScroll: true });
+  if (ticket !== navigationId) return;
+  clearLoading();
+  const changed = view !== target;
+  const style = target === previousView || target === 'start' ? 'back' : 'forward';
+  const snapshot = Boolean(view && view !== 'world' && target !== 'world');
+  const update = () => {
+    if (ticket !== navigationId) return false;
+    if (changed) previousView = view;
+    view = target;
+    routeError = failed;
+    if (view === 'avatar' && state.profile) avatarDraft = profileFrom(state.profile);
+    clearInterval(worldTimer);
+    render();
+    if (!failed && view === 'online' && cloud.meta()) {
+      refreshWorld();
+      worldTimer = setInterval(() => { if (!document.hidden && view === 'online') refreshWorld(); }, 4500);
+    }
+    document.title = viewNames[view] + ' · 装配工坊';
+    window.scrollTo(0, 0);
+    app.querySelector('main')?.focus({ preventScroll: true });
+    return true;
+  };
+  if (changed || routeError) switchPage(update, { style, snapshot });
+  else update();
+}
+
+async function changeCreatorStep(next) {
+  const ticket = beginNavigation();
+  const section = sectionForView('create', next);
+  if (!sectionReady(section)) {
+    try { await prepareNavigation(section, '头像工坊'); }
+    catch {
+      if (ticket === navigationId) {
+        clearLoading();
+        toast('头像工坊加载失败，请再试一次。');
+      }
+      return;
+    }
+  }
+  if (ticket !== navigationId) return;
+  clearLoading();
+  switchPage(() => {
+    if (ticket !== navigationId || view !== 'create') return false;
+    step = next;
+    render();
+    window.scrollTo(0, 0);
+    (app.querySelector('#nick, [data-choice]') ?? app.querySelector('main'))?.focus({ preventScroll: true });
+    return true;
+  }, { style: next < step ? 'back' : 'forward' });
 }
 
 function button(label, route, type = 'secondary') {
@@ -163,6 +231,7 @@ function shell(contents, guest = false) {
 
 function startPage() {
   return `<section class="start-scene">
+    <img class="start-art" src="${asset('cover')}" alt="" fetchpriority="high" decoding="async">
     <div class="start-hero container">
       <span class="bay-label"><i></i> 加州电子装配车间</span>
       <h1>装配工坊</h1>
@@ -194,7 +263,7 @@ function creatorPage() {
      <div class="choice-block"><h3>脸型预设</h3><div class="choices">${options('face', FACE_LABELS.map((n, i) => [i, n]))}</div></div>
      <div class="choice-block"><h3>发型</h3><div class="choices">${options('hair', HAIR_LABELS.map((n, i) => [i, n]))}</div></div>
      <div class="choice-block"><h3>肤色</h3><div class="choices">${options('tone', TONES.map((n, i) => [i, n]))}</div></div>
-     ${step === 1 ? avatarStudioMarkup(ctx, { profile: draft }) : ''}`,
+     ${step === 1 ? loadedSection('avatar').avatarStudioMarkup(ctx, { profile: draft }) : ''}`,
     `<h2>给角色取个名字</h2><p>工友会在大厅与聊天中看到这个名字。</p>
      <label for="nick">角色昵称</label><input id="nick" name="nickname" type="text" autocomplete="off" spellcheck="false" maxlength="28" value="${draft.name === '新人工友' ? '' : esc(draft.name)}" placeholder="例如 Alex-Lin" aria-describedby="name-hint">
      <p id="name-hint" class="field-hint" aria-live="polite">可用汉字、字母、数字，长度 2–14 字。</p>`,
@@ -206,7 +275,7 @@ function creatorPage() {
        <form id="create-form" class="form-panel" novalidate>
          ${fields[step]}
          <div class="btn-row">${step ? '<button class="btn btn-secondary" type="button" data-action="back-create">上一步</button>' : button('返回', state.profile ? 'hall' : 'start')}
-           <button class="btn btn-primary" type="submit">${step === 2 ? '确认进入工坊' : '下一步'}</button>
+           <button class="btn btn-primary" type="submit"${step === 0 ? ' data-preload-avatar' : ''}>${step === 2 ? '确认进入工坊' : '下一步'}</button>
            ${step === 1 ? '<button class="btn btn-text" type="button" data-action="reset-avatar">重置外观</button>' : ''}
          </div>
        </form>
@@ -299,7 +368,7 @@ function editAvatarPage() {
     <div class="creator-grid avatar-layout">
       <div class="preview-portrait" aria-label="角色头像预览">${portrait(avatarDraft, 'large')}<div><span>${WORK_GROUPS[avatarDraft.group]}</span><b>${esc(avatarDraft.name)}</b></div></div>
       <div class="form-panel avatar-form">
-        ${avatarStudioMarkup(ctx, { profile: avatarDraft, editing: true })}
+        ${loadedSection('avatar').avatarStudioMarkup(ctx, { profile: avatarDraft, editing: true })}
         <div class="btn-row">${button('取消', 'account')}${command('保存头像', 'save-avatar', 'primary')}</div>
       </div>
     </div>
@@ -430,23 +499,33 @@ function render() {
   disposePage?.();
   disposePage = undefined;
   const guest = !state.profile || view === 'start' || view === 'create';
-  const page = trainingViews.has(view) ? trainingPage(view, ctx)
-    : communityViews.has(view) ? communityPage(view, ctx)
-    : view === 'world' ? factoryPage(ctx)
-    : view === 'social' ? socialPage(ctx)
-    : view === 'shop' ? shopPage(ctx)
+  app.dataset.uiRoute = view;
+  if (routeError) {
+    app.innerHTML = shell(`<section class="container route-failure"><div class="form-panel">
+      <h1>${esc(viewNames[view])}加载失败</h1><p>检查连接后可以重试。</p>
+      <div class="btn-row"><button class="btn btn-primary" type="button" data-action="retry-route">重试</button>${button('返回首页', state.profile && view !== 'hall' ? 'hall' : 'start')}</div>
+    </div></section>`, guest);
+    return;
+  }
+  const section = sectionForView(view, step);
+  const module = loadedSection(section);
+  const page = section === 'training' ? module.trainingPage(view, ctx)
+    : section === 'community' ? module.communityPage(view, ctx)
+    : view === 'world' ? module.factoryPage(ctx)
+    : view === 'social' ? module.socialPage(ctx)
+    : view === 'shop' ? module.shopPage(ctx)
     : ({ start: startPage, create: creatorPage, avatar: editAvatarPage, hall: hallPage, account: accountPage, online: onlinePage }[view])();
   app.innerHTML = shell(typeof page === 'string' ? page : '', guest);
   const panel = document.querySelector('#main');
   if (typeof page !== 'string' && page) panel.append(page);
-  if (trainingViews.has(view)) bindTraining(panel, view, ctx);
-  if (communityViews.has(view)) bindCommunity(panel, view, ctx);
-  if (view === 'shop') bindShop(panel, ctx);
-  if (view === 'world') disposePage = bindFactoryPage(panel, ctx);
-  if (view === 'social') disposePage = bindSocialPage(panel, ctx);
+  if (section === 'training') module.bindTraining(panel, view, ctx);
+  if (section === 'community') module.bindCommunity(panel, view, ctx);
+  if (view === 'shop') module.bindShop(panel, ctx);
+  if (view === 'world') disposePage = module.bindFactoryPage(panel, ctx);
+  if (view === 'social') disposePage = module.bindSocialPage(panel, ctx);
   if ((view === 'create' && step === 1) || view === 'avatar') {
     const profile = view === 'avatar' ? avatarDraft : draft;
-    disposePage = bindAvatarStudio(panel, {
+    disposePage = module.bindAvatarStudio(panel, {
       profile, portrait, escape: esc,
       onSelect(avatar) {
         profile.avatar = avatar;
@@ -468,6 +547,33 @@ function setProfile(profile) {
   toast('已进入 ' + WORK_GROUPS[state.profile.group] + '。');
   go('hall');
 }
+
+function prefetchControl(control) {
+  const network = navigator.connection;
+  if (!control?.isConnected || network?.saveData || /2g/.test(network?.effectiveType ?? '')) return;
+  const href = control.getAttribute('href');
+  const hash = href?.startsWith('#') ? href.slice(1) : '';
+  const section = control.hasAttribute('data-preload-avatar') ? 'avatar'
+    : Object.hasOwn(viewNames, hash) ? sectionForView(resolveView(hash), step) : '';
+  if (!sectionReady(section)) void loadSection(section).catch(() => {});
+}
+
+let hoverTimer;
+const prefetchSelector = 'a[href^="#"], [data-preload-avatar]';
+app.addEventListener('pointerover', event => {
+  if (event.pointerType !== 'mouse' || event.buttons) return;
+  const control = event.target.closest(prefetchSelector);
+  if (!control || control.contains(event.relatedTarget)) return;
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => prefetchControl(control), 150);
+});
+app.addEventListener('pointerout', event => {
+  const control = event.target.closest(prefetchSelector);
+  if (control && !control.contains(event.relatedTarget)) clearTimeout(hoverTimer);
+});
+app.addEventListener('focusin', event => {
+  if (event.target.matches(':focus-visible')) prefetchControl(event.target.closest(prefetchSelector));
+});
 
 function usefulClipboard(text) {
   if (!navigator.clipboard) throw new Error('请点查看游玩码，再手动复制。');
@@ -539,7 +645,8 @@ app.addEventListener('click', async event => {
   if (!button) return;
   const action = button.dataset.action;
   if (action === 'quick') setProfile({ ...initialState(), name: '见习装配员', face: 1 });
-  if (action === 'back-create') { step = Math.max(0, step - 1); render(); }
+  if (action === 'back-create') { void changeCreatorStep(Math.max(0, step - 1)); }
+  if (action === 'retry-route') { void changeRoute(); return; }
   if (action === 'reset-avatar') { draft = profileFrom({ name: draft.name, group: draft.group }); render(); }
   if (action === 'edit-avatar') { draft = { ...state.profile }; step = 1; go('create'); }
   if (action === 'save-avatar' && view === 'avatar' && state.profile) {
@@ -606,7 +713,7 @@ app.addEventListener('submit', async event => {
   const form = event.target;
   if (form.id === 'create-form') {
     event.preventDefault();
-    if (step < 2) { step += 1; render(); app.querySelector('#nick, [data-choice]')?.focus(); return; }
+    if (step < 2) { void changeCreatorStep(step + 1); return; }
     draft.name = String(new FormData(form).get('nickname') ?? '');
     if (!validName(draft.name)) {
       const field = document.querySelector('#nick');

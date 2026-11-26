@@ -6,29 +6,21 @@
   <meta name="theme-color" content="#172d45">
   <meta name="description" content="进入装配工坊，在虚拟车间练习工序、和工友合作并解锁岗位技能。">
   <title>装配工坊 · 岗位训练游戏</title>
-  <link rel="icon" href="./assets/icon.png?v=ca1" type="image/png">
-  <link rel="preload" href="./assets/cover.webp?v=ca1" as="image">
+  <link rel="icon" href="./assets/icon.png?v=motion1" type="image/png">
+  <link rel="modulepreload" href="./app.js?v=motion1">
   <link rel="stylesheet" href="./styles.css">
-  <link rel="stylesheet" href="./training.css">
-  <link rel="stylesheet" href="./community.css">
-  <link rel="stylesheet" href="./community-play.css">
-  <link rel="stylesheet" href="./online-play.css">
-  <link rel="stylesheet" href="./factory-page.css">
-  <link rel="stylesheet" href="./factory-workbenches.css">
-  <link rel="stylesheet" href="./factory-recovery.css">
-  <link rel="stylesheet" href="./shop.css">
-  <link rel="stylesheet" href="./california-ui.css?v=avatar1">
-  <link rel="stylesheet" href="./social-page.css">
-  <link rel="stylesheet" href="./factory-social.css">
-  <link rel="stylesheet" href="./avatar-studio.css">
+  <link rel="stylesheet" href="./california-ui.css?v=motion1">
+  <link rel="stylesheet" href="./interaction-effects.css">
+  <link rel="stylesheet" href="./route-motion.css">
 </head>
 <body>
-  <div id="app"><p class="startup">正在打开装配工坊…</p></div>
+  <div id="app"><p class="startup workshop-boot" role="status"><span class="boot-mark" aria-hidden="true"></span><span>正在打开装配工坊…</span></p></div>
+  <div id="route-loading" class="route-loading" role="status" hidden><i aria-hidden="true"></i><span></span></div>
   <div id="notice" class="toast" role="status" aria-live="polite"></div>
   <noscript><p class="startup">请打开 JavaScript 后进入装配工坊。</p></noscript>
   <script type="importmap">
     {"imports":{"three":"./vendor/three/three.module.min.js"}}
   </script>
-  <script src="./app.js?v=avatar1" type="module"></script>
+  <script src="./app.js?v=motion1" type="module"></script>
 </body>
 </html>

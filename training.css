@@ -111,23 +111,38 @@
 }
 
 .training-mission-art {
+  position: relative;
+  isolation: isolate;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: .4rem;
   min-height: 7.5rem;
   padding: .65rem;
-  background:
-    linear-gradient(170deg, #101f21bd, #0c1a1c08 70%),
-    var(--training-scene) center 48% / cover no-repeat,
-    #263e3f;
+  --mission-shade: linear-gradient(170deg, #101f21bd, #0c1a1c08 70%);
+  background: #263e3f;
 }
 
 .training-mission--locked .training-mission-art {
-  background:
-    linear-gradient(170deg, #182123b8, #13202373),
-    var(--training-scene) center 48% / cover no-repeat,
-    #263e3f;
+  --mission-shade: linear-gradient(170deg, #182123b8, #13202373);
+}
+.training-mission-art > img,
+.training-mission-art::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.training-mission-art > img {
+  z-index: -2;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  object-position: center 48%;
+}
+.training-mission-art::after {
+  z-index: -1;
+  content: "";
+  background: var(--mission-shade);
 }
 
 .training-mission-status,

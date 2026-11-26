@@ -2,6 +2,7 @@ import { mountFactoryWorkbench } from './factory-workbenches.js';
 import { installRecoveryPart, normalizeRecovery, RECOVERY_PARTS, RECOVERY_RECIPES } from './factory-recovery.js';
 import { recoveryAssembly, recoveryCatalog, recoveryEventText, recoveryPhaseLabel, recoveryRecipeFor } from './factory-recovery-ui.js';
 import { factorySocialMarkup, bindFactorySocial } from './factory-social.js';
+import { loadFactoryAssets } from './factory-assets.js';
 
 const zones = [
   { id: 'entrance', label: '车间入口', blurb: '沿车间主通道前进，进入各个作业区。' },
@@ -29,7 +30,7 @@ export function factoryPage(ctx) {
       <div class="factory-layout" data-factory-layout>
         <div class="factory-viewer">
           <div class="factory-scene" data-factory-scene data-state="loading" data-mode="overview" aria-busy="true">
-            <img class="factory-fallback" src="${escape(ctx.asset('yard'))}" alt="" draggable="false">
+            <img class="factory-fallback" src="${escape(ctx.asset('yard'))}" alt="" draggable="false" decoding="async">
             <canvas data-factory-canvas tabindex="-1" aria-label="三维工厂" aria-describedby="factory-controls" aria-hidden="true" draggable="false"></canvas>
             <div class="factory-hud">
               <div class="factory-location"><i aria-hidden="true"></i><span data-factory-location>车间入口</span></div>
@@ -173,6 +174,7 @@ export function bindFactoryPage(root, ctx) {
   const benchButtons = new Map();
   let points = new Map(zones.map(point => [point.id, point]));
   let scene;
+  let downloads;
   let selected = 'entrance';
   let generation = 0;
   let ready = false;
@@ -469,6 +471,9 @@ export function bindFactoryPage(root, ctx) {
   async function loadScene() {
     const current = ++generation;
     const active = () => !disposed && current === generation;
+    downloads?.abort();
+    const controller = new AbortController();
+    downloads = controller;
     stopMoving();
     stopLooking();
     scene?.destroy();
@@ -483,15 +488,21 @@ export function bindFactoryPage(root, ctx) {
     announce('');
     showState('loading');
     showMode('overview');
+    const workerProfile = ctx.state().profile;
+    const updateProgress = value => {
+      if (active() && Number.isFinite(value)) progress.value = Math.min(1, Math.max(0, value));
+    };
+    // Start transfer alongside the renderer module. Route disposal cancels the downloads.
+    const resources = loadFactoryAssets(workerProfile, controller.signal, updateProgress);
+    resources.catch(() => {});
     try {
-      const { createFactoryScene } = await import('./factory-view.js');
+      const { createFactoryScene } = await import('./factory-view.js?v=motion1');
       if (!active()) return;
       scene = createFactoryScene(canvas, {
         recovery: recoveryProgress,
-        workerProfile: ctx.state().profile,
-        onProgress(value) {
-          if (active() && Number.isFinite(value)) progress.value = Math.min(1, Math.max(0, value));
-        },
+        workerProfile,
+        resources,
+        onProgress: updateProgress,
         onReady(layout) {
           if (!active()) return;
           const next = new Map(zones.map(point => [point.id, point]));
@@ -545,6 +556,7 @@ export function bindFactoryPage(root, ctx) {
       showState('ready');
       if (selected !== 'entrance') scene.jumpTo(selected);
     } catch {
+      controller.abort();
       if (!active()) return;
       scene?.destroy();
       scene = undefined;
@@ -698,6 +710,7 @@ export function bindFactoryPage(root, ctx) {
   return () => {
     if (disposed) return;
     disposed = true;
+    downloads?.abort();
     stopMoving();
     stopLooking();
     unmountGame?.();

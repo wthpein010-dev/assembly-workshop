@@ -39,8 +39,16 @@
 }
 
 .factory-fallback { object-fit: cover; object-position: center 46%; opacity: .55; }
-.factory-scene:not([data-state="ready"]) canvas { visibility: hidden; }
-.factory-scene[data-state="ready"] .factory-fallback { visibility: hidden; }
+.factory-scene canvas { transition: opacity 180ms ease-out; }
+.factory-scene:not([data-state="ready"]) canvas { visibility: hidden; opacity: 0; }
+.factory-scene[data-state="ready"] .factory-fallback {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 180ms ease-out, visibility 0s 180ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .factory-scene canvas, .factory-scene[data-state="ready"] .factory-fallback { transition: none; }
+}
 .factory-scene canvas:focus-visible { outline: 2px solid var(--mint); outline-offset: -3px; }
 .factory-scene[data-mode="walk"] canvas { touch-action: none; cursor: crosshair; }
 .factory-scene[data-mode="overview"] canvas { touch-action: none; cursor: grab; }
